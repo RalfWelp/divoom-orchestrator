@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -200,7 +201,8 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(Path(static.path).is_file())
         self.panel_custom.async_register_panel.assert_awaited_once()
         options = self.panel_custom.async_register_panel.await_args.kwargs
-        self.assertEqual(options["module_url"], static.url_path)
+        manifest = json.loads((PACKAGE / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(options["module_url"], f"{static.url_path}?v={manifest['version']}")
         self.assertEqual(options["webcomponent_name"], "divoom-orchestrator-panel")
         self.assertTrue(options["require_admin"])
 

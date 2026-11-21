@@ -7,6 +7,7 @@ from homeassistant.components import panel_custom
 from homeassistant.core import HomeAssistant
 
 PANEL_URL = "/divoom-orchestrator-static/panel.js"
+PANEL_VERSION = "0.2.1"
 
 
 async def async_register_panel(hass: HomeAssistant) -> None:
@@ -21,6 +22,6 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         webcomponent_name="divoom-orchestrator-panel",
         sidebar_title="Divoom Orchestrator",
         sidebar_icon="mdi:animation-play",
-        module_url=PANEL_URL,
+        module_url=f"{PANEL_URL}?v={PANEL_VERSION}",
         require_admin=True,
     )
