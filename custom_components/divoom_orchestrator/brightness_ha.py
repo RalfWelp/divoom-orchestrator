@@ -167,7 +167,7 @@ class BrightnessRuntime:
         )
 
     async def configure(self, config: dict[str, Any]) -> None:
-        config = CONFIG_SCHEMA(config)
+        config = CONFIG_SCHEMA(dict(config))
         config["device"] = config["device"].strip()
         for key in ("motion", "connection"):
             config[key] = config[key].strip()

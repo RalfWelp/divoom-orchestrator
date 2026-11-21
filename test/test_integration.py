@@ -210,7 +210,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         runtime = self.hass.data["divoom_orchestrator"]["brightness"]
         config = dict(runtime.config)
         config.update({"device": "pixoo", "night": 0})
-        await runtime.configure(config)
+        await runtime.configure(types.MappingProxyType(config))
         runtime.store.async_save.assert_awaited_once_with(config)
         self.assertEqual(runtime.config["night"], 0)
         await asyncio.sleep(0)
