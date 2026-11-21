@@ -1,0 +1,11 @@
+{
+  "domain": "divoom_orchestrator",
+  "name": "Divoom Orchestrator",
+  "version": "0.1.0",
+  "config_flow": true,
+  "dependencies": ["divoom", "frontend", "panel_custom"],
+  "documentation": "https://github.com/RalfWelp/divoom-orchestrator",
+  "issue_tracker": "https://github.com/RalfWelp/divoom-orchestrator/issues",
+  "codeowners": ["@RalfWelp"],
+  "iot_class": "local_push"
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><title>Orchestrator Panel Test</title></head>
+<body>
+  <div id="calls" hidden></div>
+  <div id="menu-event" hidden></div>
+  <div id="failure" hidden></div>
+  <script type="module">
+    import "../custom_components/divoom_orchestrator/frontend/panel.js";
+    const panel = document.createElement("divoom-orchestrator-panel");
+    panel.hass = {
+      callService: async (domain, action, data) => {
+        document.querySelector("#calls").textContent = JSON.stringify({domain, action, data});
+        if (document.querySelector("#failure").textContent) throw new Error("Testfehler");
+      },
+    };
+    panel.addEventListener("hass-toggle-menu", () => {
+      document.querySelector("#menu-event").textContent = "opened";
+    });
+    document.body.appendChild(panel);
+  </script>
+</body>
+</html>

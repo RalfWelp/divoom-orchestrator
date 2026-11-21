@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "custom_components" / "divoom_playlist" / "playlist.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "custom_components" / "divoom_orchestrator" / "playlist.py"
 spec = importlib.util.spec_from_file_location("playlist", SCRIPT)
 playlist = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(playlist)
@@ -45,27 +45,138 @@ class ScanTests(unittest.TestCase):
             with patch.object(random, "shuffle", side_effect=lambda values: values.reverse()):
                 self.assertEqual(playlist.scan_gifs(root, ".", True), ["b.gif", "a.gif"])
 
+    def test_scans_real_directory_changes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "old.gif").write_bytes(b"test")
+            self.assertEqual(playlist.scan_gifs(root, ".", False), ["old.gif"])
+            (root / "old.gif").unlink()
+            (root / "new.gif").write_bytes(b"test")
+            self.assertEqual(playlist.scan_gifs(root, ".", False), ["new.gif"])
+
+    def test_empty_and_absolute_folder_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for folder in ("", str(root)):
+                with self.subTest(folder=folder), self.assertRaises(ValueError):
+                    playlist.scan_gifs(root, folder, False)
+
 
 class PlaybackTests(unittest.IsolatedAsyncioTestCase):
     async def test_rescans_after_each_cycle(self):
-        scan = AsyncMock(side_effect=[["a.gif", "b.gif"], ["new.gif"], asyncio.CancelledError()])
+        scan = AsyncMock(side_effect=[["new.gif"], asyncio.CancelledError()])
         show = AsyncMock()
-        with patch.object(playlist.asyncio, "sleep", new_callable=AsyncMock) as sleep:
+        async def timeout(waiter, *, timeout):
+            waiter.close()
+            raise TimeoutError
+
+        with patch.object(playlist.asyncio, "wait_for", side_effect=timeout) as wait:
             with self.assertRaises(asyncio.CancelledError):
-                await playlist.play(scan, show, 4)
+                await playlist.play(scan, show, 4, asyncio.Event(), ["a.gif", "b.gif"])
         self.assertEqual([call.args[0] for call in show.await_args_list], ["a.gif", "b.gif", "new.gif"])
-        self.assertEqual(sleep.await_count, 3)
-        self.assertTrue(all(call.args == (4,) for call in sleep.await_args_list))
+        self.assertEqual(wait.call_count, 3)
+        self.assertTrue(all(call.kwargs == {"timeout": 4} for call in wait.call_args_list))
 
     async def test_empty_folder_and_send_errors_are_not_silent(self):
         with self.assertRaisesRegex(ValueError, "no GIF"):
-            await playlist.play(AsyncMock(return_value=[]), AsyncMock(), 1)
+            await playlist.play(AsyncMock(), AsyncMock(), 1, asyncio.Event(), [])
         with self.assertRaisesRegex(RuntimeError, "send failed"):
-            await playlist.play(AsyncMock(return_value=["a.gif"]), AsyncMock(side_effect=RuntimeError("send failed")), 1)
+            await playlist.play(AsyncMock(), AsyncMock(side_effect=RuntimeError("send failed")), 1, asyncio.Event(), ["a.gif"])
 
     async def test_nonpositive_duration_rejected(self):
         with self.assertRaises(ValueError):
-            await playlist.play(AsyncMock(), AsyncMock(), 0)
+            await playlist.play(AsyncMock(), AsyncMock(), 0, asyncio.Event(), ["a.gif"])
+
+    async def test_controller_stop_waits_for_inflight_send(self):
+        started = asyncio.Event()
+        finish = asyncio.Event()
+        shown = []
+
+        async def show(filename):
+            shown.append(filename)
+            started.set()
+            await finish.wait()
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        await controller.start(AsyncMock(return_value=["a.gif", "b.gif"]), show, 10)
+        await started.wait()
+        stop = asyncio.create_task(controller.stop())
+        await asyncio.sleep(0)
+        self.assertFalse(stop.done())
+        finish.set()
+        await stop
+        self.assertEqual(shown, ["a.gif"])
+
+    async def test_concurrent_starts_and_restart(self):
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def scan():
+            entered.set()
+            await release.wait()
+            return ["a.gif"]
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        first = asyncio.create_task(controller.start(scan, AsyncMock(), 100))
+        await entered.wait()
+        second = asyncio.create_task(controller.start(scan, AsyncMock(), 100))
+        release.set()
+        await first
+        with self.assertRaisesRegex(ValueError, "already running"):
+            await second
+        await controller.stop()
+        await controller.start(AsyncMock(return_value=["b.gif"]), AsyncMock(), 100)
+        await controller.stop()
+
+    async def test_stop_interrupts_wait(self):
+        shown = asyncio.Event()
+
+        async def show(filename):
+            shown.set()
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        await controller.start(AsyncMock(return_value=["a.gif", "b.gif"]), show, 3600)
+        await shown.wait()
+        await asyncio.wait_for(controller.stop(), timeout=1)
+
+    async def test_background_failure_reported_and_restart_allowed(self):
+        reported = asyncio.Event()
+        errors = []
+
+        async def on_error(err):
+            errors.append(str(err))
+            reported.set()
+
+        controller = playlist.PlaylistController(asyncio.create_task, on_error)
+        await controller.start(AsyncMock(return_value=["a.gif"]), AsyncMock(side_effect=OSError("offline")), 1)
+        await reported.wait()
+        self.assertEqual(errors, ["offline"])
+        await controller.start(AsyncMock(return_value=["b.gif"]), AsyncMock(), 100)
+        await controller.stop()
+
+    async def test_initial_empty_folder_rejected(self):
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        with self.assertRaisesRegex(ValueError, "no GIF"):
+            await controller.start(AsyncMock(return_value=[]), AsyncMock(), 1)
+
+    async def test_directory_becomes_empty_after_cycle(self):
+        reported = asyncio.Event()
+        errors = []
+
+        async def on_error(err):
+            errors.append(str(err))
+            reported.set()
+
+        async def timeout(waiter, *, timeout):
+            waiter.close()
+            raise TimeoutError
+
+        controller = playlist.PlaylistController(asyncio.create_task, on_error)
+        with patch.object(playlist.asyncio, "wait_for", side_effect=timeout):
+            await controller.start(AsyncMock(side_effect=[["one.gif"], []]), AsyncMock(), 1)
+            await reported.wait()
+        self.assertIn("no GIF", errors[0])
+        await controller.stop()
 
 
 if __name__ == "__main__":
