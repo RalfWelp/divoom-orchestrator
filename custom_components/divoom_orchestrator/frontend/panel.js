@@ -32,6 +32,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
         h3 { margin:0 0 8px; font-size:18px; } .muted { color:var(--secondary-text-color,#63717c); font-size:14px; }
         label { display:block; margin-top:17px; font-size:14px; font-weight:600; }
         input,select { width:100%; margin-top:7px; padding:11px; border:1px solid var(--divider-color,#c7cdd2); border-radius:8px; background:var(--card-background-color,#fff); color:var(--primary-text-color,#202124); font:inherit; }
+        input[type=checkbox] { width:auto; margin-right:8px; }
         button { border:0; border-radius:8px; padding:11px 16px; font:inherit; font-weight:600; cursor:pointer; }
         button:disabled { opacity:.5; cursor:wait; }
         .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
@@ -45,7 +46,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
       <main>
         <section class="hero"><div class="eyebrow">Deine Smart Doorbell</div>
           <h2>Animationen für deinen Pixoo</h2>
-          <p>Erste Oberfläche: Eine Ordner-Playlist direkt starten und stoppen.</p>
+          <p>Playlists und automatische Helligkeit für dein Display.</p>
         </section>
         <div class="grid">
           <section class="card">
@@ -58,6 +59,26 @@ class DivoomOrchestratorPanel extends HTMLElement {
               <label>Reihenfolge<select name="order"><option value="alphabetical">Alphabetisch</option><option value="random">Zufällig</option></select></label>
               <div class="actions"><button type="submit" class="primary">▶ Playlist starten</button><button type="button" class="secondary" id="stop">■ Stoppen</button></div>
               <p id="message" class="message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="card">
+            <h3>Automatische Helligkeit</h3>
+            <p class="muted">Die Automatik steuert das Display direkt. Bei Bewegung 100 %, mindestens 30 Sekunden. Tests gelten 30 Sekunden und setzen danach die Automatik fort.</p>
+            <form id="brightness">
+              <label><input type="checkbox" name="enabled">Automatik aktivieren</label>
+              <label>Gerätekennung<input name="device" required autocomplete="off"></label>
+              <label>Bewegungsmelder<select name="motion"><option value="">Keiner</option></select></label>
+              <label>Bluetooth-Status für Wiederverbindung<select name="connection"><option value="">Keiner</option></select></label>
+              <label>Startzeit morgens<input type="time" name="morning" required></label>
+              <label>Tag (%)<input type="number" name="day" min="0" max="100" step="1" required></label>
+              <button type="button" class="secondary brightness-test" data-level="day">Tag testen</button>
+              <label>Dämmerung (%)<input type="number" name="twilight" min="0" max="100" step="1" required></label>
+              <button type="button" class="secondary brightness-test" data-level="twilight">Dämmerung testen</button>
+              <label>Nacht (%)<input type="number" name="night" min="0" max="100" step="1" required></label>
+              <button type="button" class="secondary brightness-test" data-level="night">Nacht testen</button>
+              <p class="muted">0 % schaltet das Display aus. Dämmerung ab Sonnenuntergang bis −6° Sonnenstand; morgens ab Startzeit bis Sonnenaufgang.</p>
+              <div class="actions"><button type="submit" class="primary">Helligkeit speichern</button></div>
+              <p id="brightness-message" class="message" role="status" aria-live="polite"></p>
             </form>
           </section>
           <section class="card">
@@ -94,6 +115,87 @@ class DivoomOrchestratorPanel extends HTMLElement {
       });
     }
     this.shadowRoot.querySelector("#stop").addEventListener("click", () => this._call("stop", {}));
+    const brightness = this.shadowRoot.querySelector("#brightness");
+    brightness.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!brightness.reportValidity()) return;
+      const config = {
+        enabled: brightness.elements.enabled.checked,
+        device: brightness.elements.device.value.trim(),
+        motion: brightness.elements.motion.value,
+        connection: brightness.elements.connection.value,
+        morning: brightness.elements.morning.value,
+        day: Number(brightness.elements.day.value),
+        twilight: Number(brightness.elements.twilight.value),
+        night: Number(brightness.elements.night.value),
+      };
+      this._brightnessCall("brightness_configure", config, "Einstellungen gespeichert.");
+    });
+    brightness.querySelectorAll(".brightness-test").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = brightness.elements[button.dataset.level];
+        if (!input.reportValidity()) return;
+        this._brightnessCall("brightness_test", { value: Number(input.value) }, "Test aktiv für 30 Sekunden.");
+      });
+    });
+    this._loadBrightness();
+  }
+
+  async _loadBrightness() {
+    const form = this.shadowRoot.querySelector("#brightness");
+    const message = this.shadowRoot.querySelector("#brightness-message");
+    form.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+    message.textContent = "Einstellungen werden geladen …";
+    try {
+      const config = await this._hass.callWS({ type: "divoom_orchestrator/brightness" });
+      for (const [name, filter] of [
+        ["motion", (id) => id.startsWith("binary_sensor.")],
+        ["connection", (id) => id.startsWith("sensor.") || id.startsWith("binary_sensor.")],
+      ]) {
+        const select = form.elements[name];
+        Object.values(this._hass.states).filter((state) => filter(state.entity_id))
+          .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id))
+          .forEach((state) => {
+            const option = document.createElement("option");
+            option.value = state.entity_id;
+            option.textContent = `${state.attributes.friendly_name || state.entity_id} (${state.entity_id})`;
+            select.appendChild(option);
+          });
+        if (config[name] && !Array.from(select.options).some((option) => option.value === config[name])) {
+          const option = document.createElement("option");
+          option.value = config[name];
+          option.textContent = `${config[name]} (nicht verfügbar)`;
+          select.appendChild(option);
+        }
+      }
+      for (const name of ["device", "motion", "connection", "morning", "day", "twilight", "night"]) {
+        form.elements[name].value = config[name];
+      }
+      form.elements.enabled.checked = config.enabled;
+      message.textContent = "";
+      form.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+    } catch (error) {
+      message.textContent = `Einstellungen konnten nicht geladen werden: ${error.message || String(error)}`;
+      message.classList.add("error");
+    }
+  }
+
+  async _brightnessCall(action, data, success) {
+    const form = this.shadowRoot.querySelector("#brightness");
+    const message = this.shadowRoot.querySelector("#brightness-message");
+    const buttons = form.querySelectorAll("button");
+    buttons.forEach((button) => { button.disabled = true; });
+    message.classList.remove("error");
+    message.textContent = "Bitte warten …";
+    try {
+      await this._hass.callService("divoom_orchestrator", action, data);
+      message.textContent = success;
+    } catch (error) {
+      message.textContent = `Aktion fehlgeschlagen: ${error.message || String(error)}`;
+      message.classList.add("error");
+    } finally {
+      buttons.forEach((button) => { button.disabled = false; });
+    }
   }
 
   async _call(action, data) {

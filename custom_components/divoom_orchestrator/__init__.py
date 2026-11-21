@@ -17,6 +17,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .playlist import PlaylistController, scan_gifs
 from .panel import async_register_panel
+from .brightness_ha import BrightnessRuntime, register as register_brightness
 
 DOMAIN = "divoom_orchestrator"
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register actions independently of the integration entry lifecycle."""
     hass.data.setdefault(DOMAIN, {})
     await async_register_panel(hass)
+    register_brightness(hass)
 
     def controller() -> PlaylistController:
         instance = hass.data[DOMAIN].get("controller")
@@ -97,12 +99,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return hass.async_create_background_task(coro, "Divoom playlist")
 
     hass.data[DOMAIN]["controller"] = PlaylistController(create_task, report_error)
+    brightness = BrightnessRuntime(hass)
+    await brightness.start()
+    hass.data[DOMAIN]["brightness"] = brightness
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Stop the playlist before unloading."""
     instance = hass.data[DOMAIN].pop("controller", None)
+    brightness = hass.data[DOMAIN].pop("brightness", None)
+    if brightness is not None:
+        await brightness.stop()
     if instance is not None:
         await instance.stop()
     return True

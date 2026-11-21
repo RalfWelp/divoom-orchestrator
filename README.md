@@ -43,10 +43,40 @@ Ordner-Playlist. Gerätekennung und Ordner werden noch von Hand eingegeben und
 nicht dauerhaft gespeichert. Die Anzeige bestätigt lediglich die Startanfrage;
 spätere Wiedergabefehler erscheinen als HA-Benachrichtigung.
 
-Der grafische Ablauf-Editor, Rotation, Events, Medienauswahl und GIF-Vorschau
-sind noch nicht implementiert. Die Oberfläche zeigt ausdrücklich keinen
+Eine separat aktivierbare Helligkeitsautomatik ist ebenfalls im Panel
+konfigurierbar. Der grafische Ablauf-Editor, die Animationen für Rotation und
+Events, Medienauswahl und GIF-Vorschau sind noch nicht implementiert.
+Die Oberfläche zeigt ausdrücklich keinen
 Live-Verbindungsstatus; dafür kann die bestehende MQTT-Statusentität genutzt
 werden. Ein Live-Test in Home Assistant steht noch aus.
+
+### Helligkeit
+
+Die Automatik ist zunächst ausgeschaltet. Im Panel Divoom-Gerätekennung,
+Bewegungsmelder und optional den Bluetooth-Statussensor auswählen, Werte und
+morgendliche Startzeit einstellen und aktiv speichern. Andere Automationen,
+die die Helligkeit desselben Displays steuern, vorher deaktivieren.
+
+Vor der morgendlichen Startzeit gilt der Nachtwert. Danach gilt bis zum
+Sonnenaufgang der Dämmerungswert, bis Sonnenuntergang der Tageswert und
+anschließend bis zum Ende der bürgerlichen Dämmerung (Sonnenstand −6°) wieder
+der Dämmerungswert. Sonst gilt der Nachtwert. Die Sonnenposition kommt aus HA.
+Ein Wert von 0 % schaltet das Display aus.
+
+Bewegung schaltet auf 100 %, solange der Sensor aktiv ist, mindestens aber
+30 Sekunden ab Auslösung. Danach wird der aktuelle Zeitwert wiederhergestellt.
+Das Display wird dafür gegebenenfalls eingeschaltet. Klingelereignisse sind
+noch nicht angebunden. Ein Testknopf verwendet den aktuell eingegebenen Wert
+für 30 Sekunden, auch wenn dieser Wert noch nicht gespeichert wurde; danach
+setzt sich die Automatik fort. Die Automatik muss dafür eingeschaltet und
+gespeichert sein.
+
+Helligkeitswechsel erfolgen in bis zu vier Schritten mit kurzen Pausen.
+Geräteübertragungen können die tatsächliche Dauer verlängern. Bei einem
+Fehler wird eine dauerhafte HA-Benachrichtigung erstellt und später erneut
+versucht. Bei Wiederverbindung des ausgewählten Statussensors wird der Wert
+erneut angewendet. Einstellungen bleiben über HA-Neustarts erhalten; ein
+temporärer Test nicht.
 
 ## Aktionen
 

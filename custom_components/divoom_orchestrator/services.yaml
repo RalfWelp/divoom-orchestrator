@@ -39,3 +39,19 @@ start:
 stop:
   name: Playlist stoppen
   description: Stoppt nach einem laufenden Bildtransfer; das letzte Bild bleibt angezeigt.
+brightness_test:
+  name: Helligkeit testen
+  description: Testet einen Helligkeitswert 30 Sekunden, danach gilt wieder die Automatik.
+  fields:
+    value:
+      name: Helligkeit
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+          mode: slider
+brightness_configure:
+  name: Helligkeitsautomatik konfigurieren
+  description: Speichert die Einstellungen der Helligkeitsautomatik. Im Seitenleisten-Panel konfigurieren.

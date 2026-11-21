@@ -49,6 +49,7 @@ class FakeHass:
         self.services = FakeServices()
         self.config = types.SimpleNamespace(path=lambda name: str(path / name))
         self.http = types.SimpleNamespace(async_register_static_paths=AsyncMock())
+        self.states = types.SimpleNamespace(get=lambda entity: None)
 
     async def async_add_executor_job(self, func, *args):
         return await asyncio.to_thread(func, *args)
@@ -65,7 +66,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             Required=lambda key, **kwargs: key,
             Optional=lambda key, **kwargs: key,
             Schema=identity, All=identity, Coerce=identity, Range=identity,
-            In=identity, Length=identity,
+            In=identity, Length=identity, Match=identity,
         )
         ha = module("homeassistant")
         components = module("homeassistant.components")
@@ -74,14 +75,21 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             async_register_panel=AsyncMock(),
         )
         helpers = module("homeassistant.helpers")
+        websocket_api = module(
+            "homeassistant.components.websocket_api",
+            require_admin=lambda func: func,
+            websocket_command=lambda schema: lambda func: func,
+            async_register_command=lambda *args: None,
+        )
         config_validation = module(
             "homeassistant.helpers.config_validation",
-            string=str, config_entry_only_config_schema=identity,
+            string=str, boolean=bool, config_entry_only_config_schema=identity,
         )
         modules = {
             "voluptuous": vol,
             "homeassistant": ha,
             "homeassistant.components": components,
+            "homeassistant.components.websocket_api": websocket_api,
             "homeassistant.components.panel_custom": panel_custom,
             "homeassistant.components.http": module(
                 "homeassistant.components.http",
@@ -90,11 +98,27 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
             "homeassistant.config_entries": module("homeassistant.config_entries", ConfigEntry=object),
-            "homeassistant.core": module("homeassistant.core", HomeAssistant=object, ServiceCall=object),
+            "homeassistant.core": module(
+                "homeassistant.core", HomeAssistant=object, ServiceCall=object,
+                callback=lambda func: func,
+            ),
             "homeassistant.exceptions": module("homeassistant.exceptions", HomeAssistantError=FakeError),
             "homeassistant.helpers": helpers,
             "homeassistant.helpers.config_validation": config_validation,
+            "homeassistant.helpers.event": module(
+                "homeassistant.helpers.event",
+                async_track_state_change_event=lambda *args: lambda: None,
+                async_track_time_interval=lambda *args: lambda: None,
+            ),
+            "homeassistant.helpers.storage": module(
+                "homeassistant.helpers.storage",
+                Store=lambda *args: types.SimpleNamespace(
+                    async_load=AsyncMock(return_value=None), async_save=AsyncMock()
+                ),
+            ),
             "homeassistant.helpers.typing": module("homeassistant.helpers.typing", ConfigType=dict),
+            "homeassistant.util": module("homeassistant.util"),
+            "homeassistant.util.dt": module("homeassistant.util.dt"),
         }
         self.modules = patch.dict(sys.modules, modules)
         self.modules.start()
@@ -121,6 +145,8 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         sys.modules.pop("test_divoom_orchestrator", None)
         sys.modules.pop("test_divoom_orchestrator.playlist", None)
         sys.modules.pop("test_divoom_orchestrator.panel", None)
+        sys.modules.pop("test_divoom_orchestrator.brightness", None)
+        sys.modules.pop("test_divoom_orchestrator.brightness_ha", None)
 
     async def start(self, **overrides):
         data = {"device": "divoom_pixoo", "folder": "rain", "duration": 30, "order": "alphabetical"}
@@ -177,3 +203,33 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(options["module_url"], static.url_path)
         self.assertEqual(options["webcomponent_name"], "divoom-orchestrator-panel")
         self.assertTrue(options["require_admin"])
+
+    async def test_brightness_configuration_persists_and_disabled_is_idle(self):
+        runtime = self.hass.data["divoom_orchestrator"]["brightness"]
+        config = dict(runtime.config)
+        config.update({"device": "pixoo", "night": 0})
+        await runtime.configure(config)
+        runtime.store.async_save.assert_awaited_once_with(config)
+        self.assertEqual(runtime.config["night"], 0)
+        await asyncio.sleep(0)
+        self.assertFalse(any(call[0] == "divoom" for call in self.hass.services.calls))
+
+    async def test_brightness_uses_sun_and_motion_and_calls_device(self):
+        runtime = self.hass.data["divoom_orchestrator"]["brightness"]
+        states = {
+            "sun.sun": types.SimpleNamespace(
+                state="below_horizon", attributes={"elevation": -15.0, "rising": False}
+            ),
+            "binary_sensor.motion": types.SimpleNamespace(state="on"),
+        }
+        self.hass.states.get = states.get
+        brightness_ha = sys.modules["test_divoom_orchestrator.brightness_ha"]
+        from datetime import datetime
+        brightness_ha.dt_util.now = lambda: datetime(2026, 11, 21, 20, 0)
+        config = dict(runtime.config)
+        config.update({"enabled": True, "device": "pixoo", "motion": "binary_sensor.motion"})
+        await runtime.configure(config)
+        await runtime.controller.refresh()
+        self.assertIn(("divoom", "on", {"device": "pixoo"}), self.hass.services.calls)
+        self.assertIn(("divoom", "brightness", {"device": "pixoo", "brightness": 100}), self.hass.services.calls)
+        self.assertEqual(runtime._schedule(), 10)
