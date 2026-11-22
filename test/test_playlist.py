@@ -63,6 +63,153 @@ class ScanTests(unittest.TestCase):
 
 
 class PlaybackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_higher_priority_interrupts_event_at_safe_point_and_discards_remaining(self):
+        first_started = asyncio.Event()
+        release = asyncio.Event()
+        resumed = asyncio.Event()
+        rotation_started = asyncio.Event()
+        shown = []
+
+        async def show(filename):
+            shown.append(filename)
+            if filename == "rotation-1.gif":
+                rotation_started.set()
+            if filename == "low-1.gif":
+                first_started.set()
+                await release.wait()
+            if filename == "rotation-2.gif":
+                resumed.set()
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        await controller.start(
+            AsyncMock(return_value=["rotation-1.gif", "rotation-2.gif"]), show, 3600, device="pixoo"
+        )
+        await asyncio.wait_for(rotation_started.wait(), 1)
+        await controller.start_event(
+            [("low-1.gif", 10), ("low-2.gif", 10)], show, "pixoo", priority=3, name="motion"
+        )
+        await asyncio.wait_for(first_started.wait(), 1)
+        with self.assertRaisesRegex(ValueError, "equal or higher"):
+            await controller.start_event([("same.gif", 1)], show, "pixoo", priority=3, name="other")
+        with self.assertRaisesRegex(ValueError, "equal or higher"):
+            await controller.start_event([("repeat.gif", 1)], show, "pixoo", priority=1, name="motion")
+        await controller.start_event([("door.gif", 0.01)], show, "pixoo", priority=2, name="door")
+        release.set()
+        await asyncio.wait_for(resumed.wait(), 1)
+        await controller.stop()
+        self.assertIn("door.gif", shown)
+        self.assertNotIn("low-2.gif", shown)
+        self.assertLess(shown.index("low-1.gif"), shown.index("door.gif"))
+        self.assertLess(shown.index("door.gif"), shown.index("rotation-2.gif"))
+
+    async def test_priority_interrupts_event_wait_without_waiting_for_timeout(self):
+        started = asyncio.Event()
+        high = asyncio.Event()
+
+        async def show(filename):
+            if filename == "low.gif":
+                started.set()
+            if filename == "high.gif":
+                high.set()
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        await controller.start_event([("low.gif", 3600)], show, priority=3, name="low")
+        await asyncio.wait_for(started.wait(), 1)
+        await controller.start_event([("high.gif", 3600)], show, priority=1, name="high")
+        await asyncio.wait_for(high.wait(), 1)
+        await controller.stop()
+
+    async def test_event_hooks_run_on_stop_and_on_failed_transfer(self):
+        begun = asyncio.Event()
+        finished = AsyncMock()
+        reported = asyncio.Event()
+
+        async def start():
+            begun.set()
+
+        async def error(err):
+            reported.set()
+
+        controller = playlist.PlaylistController(asyncio.create_task, error)
+        await controller.start_event(
+            [("a.gif", 3600)], AsyncMock(), on_start=start, on_finish=finished
+        )
+        await asyncio.wait_for(begun.wait(), 1)
+        await controller.stop()
+        finished.assert_awaited_once()
+        finished.reset_mock()
+        await controller.start_event(
+            [("a.gif", 1)], AsyncMock(side_effect=OSError("offline")),
+            on_start=start, on_finish=finished,
+        )
+        await asyncio.wait_for(reported.wait(), 1)
+        finished.assert_awaited_once()
+        await controller.stop()
+
+    async def test_event_interrupts_rotation_and_resumes_with_next_gif(self):
+        rotation_started = asyncio.Event()
+        resumed = asyncio.Event()
+        shown = []
+
+        async def show(filename):
+            shown.append(filename)
+            if filename == "a.gif":
+                rotation_started.set()
+            if filename == "b.gif":
+                resumed.set()
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        await controller.start(AsyncMock(return_value=["a.gif", "b.gif"]), show, 3600, device="pixoo")
+        await asyncio.wait_for(rotation_started.wait(), 1)
+        await controller.start_event([("event.gif", 0.01)], show, "pixoo")
+        await asyncio.wait_for(resumed.wait(), 1)
+        await controller.stop()
+        self.assertEqual(shown, ["a.gif", "event.gif", "b.gif"])
+
+    async def test_event_waits_for_transfer_and_rejects_retrigger_and_other_device(self):
+        started = asyncio.Event()
+        finish = asyncio.Event()
+        shown = []
+
+        async def show(filename):
+            shown.append(filename)
+            if filename == "a.gif":
+                started.set()
+                await finish.wait()
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        await controller.start(AsyncMock(return_value=["a.gif", "b.gif"]), show, 3600, device="pixoo")
+        await started.wait()
+        with self.assertRaisesRegex(ValueError, "same device"):
+            await controller.start_event([("event.gif", 1)], show, "other")
+        await controller.start_event([("event.gif", 3600)], show, "pixoo")
+        with self.assertRaisesRegex(ValueError, "already running"):
+            await controller.start_event([("event.gif", 1)], show, "pixoo")
+        self.assertEqual(shown, ["a.gif"])
+        finish.set()
+        for _ in range(20):
+            await asyncio.sleep(0)
+            if len(shown) > 1:
+                break
+        self.assertEqual(shown, ["a.gif", "event.gif"])
+        await asyncio.wait_for(controller.stop(), 1)
+
+    async def test_standalone_event_runs_once(self):
+        shown = []
+        complete = asyncio.Event()
+
+        async def show(filename):
+            shown.append(filename)
+            if len(shown) == 2:
+                complete.set()
+
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        await controller.start_event([("a.gif", 0.01), ("b.gif", 0.01)], show)
+        await asyncio.wait_for(complete.wait(), 1)
+        await asyncio.sleep(0.03)
+        self.assertEqual(shown, ["a.gif", "b.gif"])
+        await controller.stop()
+
     async def test_rescans_after_each_cycle(self):
         scan = AsyncMock(side_effect=[["new.gif"], asyncio.CancelledError()])
         show = AsyncMock()

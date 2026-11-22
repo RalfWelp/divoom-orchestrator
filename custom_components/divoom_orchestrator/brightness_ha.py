@@ -179,6 +179,7 @@ class BrightnessRuntime:
             raise HomeAssistantError("Motion must be a binary sensor")
         if config["enabled"] and not config["device"]:
             raise HomeAssistantError("A Divoom device is required")
+        old_device = self.config["device"]
         async with self._config_lock:
             await self.store.async_save(config)
 
@@ -191,6 +192,10 @@ class BrightnessRuntime:
 
             await self.controller.reconfigure(update)
         self.request()
+        if old_device != config["device"]:
+            rotation = self.hass.data[DOMAIN].get("rotation")
+            if rotation is not None:
+                await rotation.device_changed()
 
     async def stop(self) -> None:
         self._closed = True

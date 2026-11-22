@@ -8,14 +8,37 @@
   <script type="module">
     import "../custom_components/divoom_orchestrator/frontend/panel.js";
     const panel = document.createElement("divoom-orchestrator-panel");
+    const events = {};
     panel.hass = {
-      states: {},
-      callWS: async (request) => request.type === "divoom_orchestrator/playlist_files"
-        ? [{file: "cloudy.gif", duration: 12}, {file: "new.gif", duration: null}]
-        : ({
-        enabled: true, device: "divoom_pixoo", motion: "", connection: "",
-        morning: "05:00", day: 100, twilight: 50, night: 10,
-      }),
+      themes: {darkMode: true},
+      states: {"weather.home": {entity_id: "weather.home", state: "sunny", attributes: {friendly_name: "Testwetter"}}},
+      callWS: async (request) => {
+        document.querySelector("#calls").textContent = JSON.stringify(request);
+        if (request.type === "divoom_orchestrator/playlist_files") {
+          const prefix = request.folder === "." ? "" : `${request.folder}/`;
+          return [{file: `${prefix}cloudy.gif`, duration: 12}, {file: `${prefix}new.gif`, duration: null}];
+        }
+        if (request.type === "divoom_orchestrator/gif_preview") {
+          return {data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", cycle_seconds: 1.5};
+        }
+        if (request.type === "divoom_orchestrator/event_folders") {
+          if (request.folder === ".") return ["bewegung", "date_events", "klingel", "rotation", "wetter"];
+          if (request.folder === "date_events") return ["date_events/sylvester", "date_events/weihnachten"];
+          return [];
+        }
+        if (request.type === "divoom_orchestrator/events") return events;
+        if (request.type === "divoom_orchestrator/rotation") return null;
+        if (request.type === "divoom_orchestrator/rotation_save") return;
+        if (request.type === "divoom_orchestrator/rotation_start") return;
+        if (request.type === "divoom_orchestrator/rotation_stop") return;
+        if (request.type === "divoom_orchestrator/event_save") { events[request.name] = request.event; return; }
+        if (request.type === "divoom_orchestrator/event_delete") { delete events[request.name]; return; }
+        if (request.type === "divoom_orchestrator/event_test") return;
+        return {
+          enabled: true, device: "divoom_pixoo", motion: "", connection: "",
+          morning: "05:00", day: 100, twilight: 50, night: 10,
+        };
+      },
       callService: async (domain, action, data) => {
         document.querySelector("#calls").textContent = JSON.stringify({domain, action, data});
         if (document.querySelector("#failure").textContent) throw new Error("Testfehler");

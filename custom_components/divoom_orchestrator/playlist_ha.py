@@ -13,6 +13,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 
 from .playlist import scan_gifs
+from .gif_preview import gif_preview
 
 DOMAIN = "divoom_orchestrator"
 
@@ -86,8 +87,30 @@ async def websocket_playlist_files(hass, connection, msg):
     ])
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): "divoom_orchestrator/gif_preview",
+    vol.Required("folder"): str,
+    vol.Required("file"): str,
+})
+@websocket_api.async_response
+async def websocket_gif_preview(hass, connection, msg):
+    if hass.data[DOMAIN].get("durations") is None:
+        connection.send_error(msg["id"], "not_loaded", "Integration is not loaded")
+        return
+    try:
+        result = await hass.async_add_executor_job(
+            gif_preview, Path(hass.config.path("pixelart")), msg["folder"], msg["file"]
+        )
+    except (OSError, ValueError) as err:
+        connection.send_error(msg["id"], "preview_failed", str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
 def register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_playlist_files)
+    websocket_api.async_register_command(hass, websocket_gif_preview)
 
     async def save(call: ServiceCall) -> None:
         if call.context.user_id:

@@ -19,6 +19,9 @@ from .playlist import PlaylistController, scan_gifs
 from .panel import async_register_panel
 from .brightness_ha import BrightnessRuntime, register as register_brightness
 from .playlist_ha import PlaylistDurations, register as register_playlist
+from .events_ha import EventStore, register as register_events
+from .rotation_ha import RotationRuntime, register as register_rotation
+from .text_ha import TextRuntime
 
 DOMAIN = "divoom_orchestrator"
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +43,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await async_register_panel(hass)
     register_brightness(hass)
     register_playlist(hass)
+    register_events(hass)
+    register_rotation(hass)
 
     def controller() -> PlaylistController:
         instance = hass.data[DOMAIN].get("controller")
@@ -76,15 +81,40 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             duration_for = None
             if call.data.get("individual_durations", False):
                 duration_for = lambda filename: durations.values.get(filename)
-            await controller().start(scan, show, duration, duration_for)
+            await controller().start(scan, show, duration, duration_for, device)
+            rotation = hass.data[DOMAIN].get("rotation")
+            if rotation is not None:
+                rotation.manual_stop = True
         except (OSError, ValueError) as err:
             raise HomeAssistantError(f"Cannot start Divoom playlist: {err}") from err
 
     async def stop(call: ServiceCall) -> None:
-        await controller().stop()
+        rotation = hass.data[DOMAIN].get("rotation")
+        if rotation is not None:
+            await rotation.stop()
+        else:
+            await controller().stop()
+
+    async def trigger(call: ServiceCall) -> None:
+        events = hass.data[DOMAIN].get("events")
+        if events is None:
+            raise HomeAssistantError("Divoom Orchestrator is not loaded")
+        name = call.data["name"]
+        event = events.events.get(name)
+        if event is None or event.get("kind", "trigger") != "trigger":
+            raise HomeAssistantError("Triggered event does not exist")
+        if not event.get("enabled", True):
+            raise HomeAssistantError("Triggered event is disabled")
+        try:
+            await events.play_event(name)
+        except (OSError, ValueError, vol.Invalid) as err:
+            raise HomeAssistantError(f"Cannot trigger event: {err}") from err
 
     hass.services.async_register(DOMAIN, "start", start, schema=START_SCHEMA)
     hass.services.async_register(DOMAIN, "stop", stop, schema=vol.Schema({}))
+    hass.services.async_register(DOMAIN, "trigger", trigger, schema=vol.Schema({
+        vol.Required("name"): vol.All(cv.string, vol.Length(min=1)),
+    }))
     return True
 
 
@@ -112,21 +142,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     durations = PlaylistDurations(hass)
     await durations.load()
+    events = EventStore(hass)
+    await events.load()
     brightness = BrightnessRuntime(hass)
     await brightness.start()
+    rotation = RotationRuntime(hass)
+    await rotation.load()
+    texts = TextRuntime(hass)
+    await texts.load()
     hass.data[DOMAIN]["controller"] = PlaylistController(create_task, report_error)
     hass.data[DOMAIN]["durations"] = durations
+    hass.data[DOMAIN]["events"] = events
     hass.data[DOMAIN]["brightness"] = brightness
+    hass.data[DOMAIN]["rotation"] = rotation
+    hass.data[DOMAIN]["texts"] = texts
+    events.listen()
+    await rotation.auto_start()
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Stop the playlist before unloading."""
-    instance = hass.data[DOMAIN].pop("controller", None)
-    brightness = hass.data[DOMAIN].pop("brightness", None)
-    hass.data[DOMAIN].pop("durations", None)
-    if brightness is not None:
-        await brightness.stop()
+    instance = hass.data[DOMAIN].get("controller")
+    brightness = hass.data[DOMAIN].get("brightness")
+    events = hass.data[DOMAIN].get("events")
+    rotation = hass.data[DOMAIN].get("rotation")
+    if rotation is not None:
+        await rotation.close()
+    if events is not None:
+        await events.close()
     if instance is not None:
         await instance.stop()
+    if brightness is not None:
+        await brightness.stop()
+    for key in ("controller", "brightness", "rotation", "durations", "events", "texts"):
+        hass.data[DOMAIN].pop(key, None)
     return True

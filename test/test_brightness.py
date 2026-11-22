@@ -72,6 +72,23 @@ class BrightnessTests(unittest.IsolatedAsyncioTestCase):
         self.controller.motion_changed(False)
         self.assertEqual(self.controller.target(), 10)
 
+    async def test_event_overrides_test_and_expires_after_end_and_minimum(self):
+        self.controller.test(20)
+        self.controller.event_started()
+        await self.controller.refresh()
+        self.assertEqual(self.controller.target(), 100)
+        self.now = 20
+        self.controller.event_finished()
+        self.assertEqual(self.controller.target(), 100)
+        self.now = 30
+        self.assertEqual(self.controller.target(), 10)
+        self.now = 31
+        self.controller.event_started()
+        self.now = 100
+        self.assertEqual(self.controller.target(), 100)
+        self.controller.event_finished()
+        self.assertEqual(self.controller.target(), 10)
+
     async def test_zero_wake_and_return(self):
         self.level = 0
         await self.controller.refresh()

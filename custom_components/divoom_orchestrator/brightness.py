@@ -44,6 +44,8 @@ class BrightnessController:
         self._motion_until = 0.0
         self._test_value: int | None = None
         self._test_until = 0.0
+        self._event_active = False
+        self._event_until = 0.0
         self._current: int | None = None
         self._powered: bool | None = None
         self._lock = asyncio.Lock()
@@ -65,6 +67,14 @@ class BrightnessController:
         self._test_value = value
         self._test_until = self._clock() + 30
 
+    def event_started(self) -> None:
+        """Keep event brightness for the event and at least 30 seconds."""
+        self._event_active = True
+        self._event_until = max(self._event_until, self._clock() + 30)
+
+    def event_finished(self) -> None:
+        self._event_active = False
+
     async def reconfigure(self, update: Callable[[], None]) -> None:
         """Apply settings only after any ongoing device command has finished."""
         async with self._lock:
@@ -74,6 +84,8 @@ class BrightnessController:
 
     def target(self) -> int:
         now = self._clock()
+        if self._event_active or now < self._event_until:
+            return 100
         if self._test_value is not None and now < self._test_until:
             return self._test_value
         self._test_value = None

@@ -2,8 +2,8 @@
 
 Eine separate Home-Assistant-Integration für GIF-Playlists mit
 [hass-divoom](https://github.com/d03n3rfr1tz3/hass-divoom). Sie ist ein
-Prototyp: Home-Assistant-Installation, Bluetooth-Übertragung und Betrieb mit
-Nextcloud wurden noch nicht auf einem echten System getestet.
+Prototyp: Frühere Versionen wurden mit Home Assistant und Pixoo getestet;
+der Event-Editor ist noch nicht auf einem echten System erprobt.
 
 ## Voraussetzungen
 
@@ -22,8 +22,7 @@ Nextcloud wurden noch nicht auf einem echten System getestet.
 
 Nach Veröffentlichung der gewünschten Version auf GitHub:
 
-HACS unterstützt nur öffentliche GitHub-Repositories. Solange dieses Repository
-privat ist, funktioniert die Installation über HACS nicht.
+HACS unterstützt nur öffentliche GitHub-Repositories.
 
 1. In HACS unter den benutzerdefinierten Repositories
    `https://github.com/RalfWelp/divoom-orchestrator` als **Integration** hinzufügen.
@@ -32,15 +31,16 @@ privat ist, funktioniert die Installation über HACS nicht.
    **Divoom Orchestrator** hinzufügen.
 
 Der Ordner muss für die Installation noch nicht vorhanden sein; er wird beim
-Start einer Playlist geprüft. Diese Anleitung ist noch nicht praktisch mit HACS
-und Home Assistant validiert.
+Start einer Playlist geprüft.
 
 ## Oberfläche
 
 Nach der Einrichtung erscheint für Administratoren **Divoom Orchestrator** in
-der Seitenleiste. Die erste Version bietet dort das Starten und Stoppen einer
-Ordner-Playlist. Gerätekennung und Ordner werden von Hand eingegeben und
-nicht dauerhaft gespeichert. Mit **GIFs laden / aktualisieren** werden die
+der Seitenleiste. Das Panel hat drei Bereiche: **Übersicht & Rotation**
+(inklusive Bluetooth-Status des ausgewählten HA-Sensors und Ordner-Playlist),
+**Event-Editor** und **Einstellungen**. Die Ordner-Playlist ist als
+Übergangslösung einklappbar; ihr Ordner wird von Hand eingegeben und nicht
+dauerhaft gespeichert. Mit **GIFs laden / aktualisieren** werden die
 Dateien des Ordners aufgelistet; für jede gewünschte Animation lässt sich eine
 eigene Anzeigezeit in Sekunden einstellen und speichern. Leere Felder und neue,
 noch nicht konfigurierte Dateien werden übersprungen. Die Zeiten sind pro
@@ -51,12 +51,106 @@ starten. Falls sich die Liste während des Bearbeitens ändert, muss sie vor dem
 Speichern neu geladen werden. Die Anzeige bestätigt lediglich die Startanfrage;
 spätere Wiedergabefehler erscheinen als HA-Benachrichtigung.
 
+GIFs bis 2 MiB werden über die für Administratoren zugängliche HA-WebSocket-
+Verbindung als animierte Vorschau geladen; der Medienordner wird nicht
+öffentlich freigegeben. Bei GIFs mit verwertbaren Framezeiten wird die
+rechnerische Dauer eines Durchlaufs angezeigt. Sie ist nur eine Näherung:
+Der Pixoo meldet das Ende eines Durchlaufs nicht und Divoom kann Frames
+reduzieren. Fehlende oder null Millisekunden lange Framezeiten werden nicht
+geschätzt. Im Event-Editor und für die Startabfolge lässt sich alternativ eine
+geschätzte Anzahl an Durchläufen einstellen.
+
 Eine separat aktivierbare Helligkeitsautomatik ist ebenfalls im Panel
-konfigurierbar. Der grafische Ablauf-Editor, die Animationen für Rotation und
-Events, Medienauswahl und GIF-Vorschau sind noch nicht implementiert.
-Die Oberfläche zeigt ausdrücklich keinen
-Live-Verbindungsstatus; dafür kann die bestehende MQTT-Statusentität genutzt
-werden. Ein Live-Test in Home Assistant steht noch aus.
+konfigurierbar.
+Der angezeigte Verbindungsstatus stammt aus der konfigurierten MQTT-Entität,
+nicht direkt vom Pixoo. Ein Live-Test des Event-Editors in Home Assistant steht noch aus.
+Das Panel übernimmt das helle oder dunkle Home-Assistant-Theme; es ändert
+keine globalen Theme-Einstellungen.
+
+### Event-Editor
+
+Im Event-Editor einen Namen eingeben, mit dem Ordnerbrowser einen Unterordner
+wählen und die gewünschten GIFs markieren. Die Divoom-Gerätekennung wird
+einmal in den Einstellungen gespeichert und für Helligkeit, Event-Tests
+und die Ordner-Playlist verwendet. Bereits gespeicherte Event-Gerätekennungen
+werden nicht für die Wiedergabe verwendet. Service-Aufrufe mit expliziter
+Gerätekennung bleiben unverändert.
+Die Seitenleiste gruppiert gespeicherte Einträge in Triggered-Events und
+Datums-Events. Für Datums-Events können jährliche oder einmalige Zeiträume
+und ein Aktivierungszustand gespeichert werden. Beide Grenztage zählen mit;
+jährliche Zeiträume dürfen über den Jahreswechsel reichen. Aktivierte Events
+werden im Datumsblock anhand des lokalen HA-Datums ausgewertet.
+Triggered-Events unterstützen einen Zustandswechsel einer HA-Entität, einen
+HA-Eventtyp oder die manuelle Aktion `divoom_orchestrator.trigger`.
+Ein bereits beim Start aktiver Zustand löst nicht aus. Deaktivierte Events
+werden automatisch und über die Aktion nicht ausgelöst.
+Bei neuen Datums-Events öffnet der Browser den Ordner `date_events`, falls
+dieser existiert. Anderenfalls beginnt er im Stammordner. Der ausgewählte
+GIF-Ordner zeigt die aktuell geladenen GIFs; mit „Unterordner öffnen“ kann
+man in einen seiner direkten Unterordner wechseln.
+Die Reihenfolge lässt sich über die Pfeile ändern. Pro GIF gelten Sekunden
+oder eine ganzzahlige Zahl geschätzter GIF-Durchläufe; dieselbe Datei kann in
+verschiedenen Events andere Einstellungen haben. Neue Dateien bleiben zunächst
+unmarkiert. Bei fehlenden Framezeiten oder Einzelbildern sind nur Sekunden
+möglich. Ein gespeichertes Event lässt sich testen oder löschen.
+
+Ein Test spielt die Schritte einmal ab. Während einer Playlist wartet er auf
+einen laufenden Transfer und setzt anschließend mit dem nächsten GIF fort.
+Playlist und Event müssen dasselbe Gerät verwenden. Nach dem letzten GIF bleibt dieses
+Bild angezeigt, wenn keine Playlist läuft. Die berechnete Durchlaufdauer
+beginnt nach dem Senden und ist keine Bestätigung des Geräts; Frames können
+beim Pixoo anders lang sein oder reduziert werden. Die GIF-Metadaten werden
+beim Test erneut geprüft.
+
+Für automatische Auslöser, die Aktion und manuelle Tests gilt die numerische
+Priorität: Ein wichtigeres Event unterbricht ein laufendes Event; gleiche
+oder niedrigere Prioritäten werden ignoriert beziehungsweise bei manueller
+Auslösung abgelehnt. Ein laufender Transfer wird
+abgewartet, das unterbrochene Event nicht fortgesetzt. Ein Trigger-Test benötigt
+die aktivierte Helligkeitsautomatik und stellt während des Events sowie für
+mindestens 30 Sekunden ab Beginn 100 % Helligkeit ein. Die Klingelhardware
+ist noch nicht angebunden.
+
+### Rotation
+
+Über **Bearbeiten** an der Startanimation einen Ordner laden, GIFs auswählen,
+sortieren und die jeweilige Dauer speichern. Die Startabfolge steht am Anfang
+jedes Durchlaufs; optional folgen ein Wetterblock, mehrere Textblöcke und alle
+aktiven Datums-Events alphabetisch. Ihre Reihenfolge lässt sich per Drag & Drop ändern und im
+Rotationseditor speichern. Änderungen werden beim nächsten Durchlauf übernommen. Bei
+gespeicherter Startabfolge und Gerätekennung startet die Rotation automatisch;
+ein manueller Stopp bleibt bis zum Neustart oder einem manuellen Start gültig.
+Die bisherige Ordner-Playlist und die Rotation verwenden denselben Controller
+und können nicht gleichzeitig laufen.
+
+Für das Wetter eine HA-Wetterentität wählen und GIFs unter
+`wetter/<Wetterzustand>/tag` beziehungsweise `wetter/<Wetterzustand>/nacht`
+ablegen. Der Zustand von `sun.sun` bestimmt Tag oder Nacht. Pro Durchlauf wird
+zufällig ein GIF gewählt; bei mehreren Dateien wird die direkte Wiederholung
+vermieden. Neue Dateien werden automatisch berücksichtigt.
+
+Ein Textblock kann festen Text, den Zustand einer HA-Entität, ein einfaches
+Attribut oder eine hochgeladene UTF-8-TXT-Liste (eine Zeile pro Spruch,
+maximal 1 MiB) verwenden. Für Listen gibt es tägliche und aufrufbezogene
+Auswahl, jeweils fortlaufend oder zufällig. Die tägliche Auswahl und der
+Fortschritt bleiben nach Neustarts erhalten; ein erneuter Upload setzt sie
+zurück. Leere beziehungsweise `unknown`/`unavailable` Werte und komplexe
+Attribute gelten als Fehler. Der Tageswechsel folgt der HA-Zeitzone.
+Textfarbe, Hintergrundfarbe, Größe, Framezeit und Anzeigedauer sind
+einstellbar. Die Anzahl der Textdurchläufe ist eine **grobe Schätzung**, da
+Schriftbreite, Framebegrenzung und Hardware das Ergebnis beeinflussen können.
+Das Senden erfolgt über `divoom.text`; die verwendete Standardschrift bestimmt
+die Divoom-Integration.
+
+Fehler bei der Auswahl der Start-, Wetter-, Text-, Datums- oder Triggerbilder werden als dauerhafte
+Benachrichtigung gemeldet und durch `fehler/start.gif` beziehungsweise
+`fehler/wetter.gif`, `fehler/text.gif`, `fehler/datum.gif` oder `fehler/trigger.gif` ersetzt,
+sofern vorhanden. Die gemeinsame Anzeigedauer ist
+einstellbar. Bei Übertragungsfehlern wird alle 30 Sekunden erneut versucht;
+ein Stopp oder Event kann das Warten unterbrechen.
+
+Die Rotationsfunktion und insbesondere die Textdarstellung wurden noch nicht
+auf einem echten Home-Assistant-/Pixoo-System geprüft.
 
 ### Helligkeit
 
@@ -123,8 +217,8 @@ die Playlist **nicht** automatisch erneut; das lässt sich bei Bedarf mit einer
 Automation einrichten.
 
 Andere Divoom-Aktionen können das aktuelle Bild überschreiben, stoppen die
-Playlist aber nicht. Event-Prioritäten und das automatische Fortsetzen einer
-Rotation sind noch nicht implementiert.
+Playlist aber nicht. Event-Prioritäten gelten nur für Events, die über den
+Orchestrator ausgelöst werden.
 
 Die Aktion `divoom_orchestrator.start` verwendet aus Gründen der
 Abwärtskompatibilität weiterhin die gemeinsame `duration`. Mit
@@ -134,7 +228,8 @@ jeweils nach Abschluss der Übertragung, nicht mit deren Beginn.
 
 ## Tests
 
-Die eigenständigen Tests brauchen nur Python 3.11 oder neuer:
+Die eigenständigen Tests brauchen Python 3.11 oder neuer, Pillow und
+Voluptuous (in Home Assistant vorhanden):
 
 ```powershell
 python -m unittest discover -s test -v

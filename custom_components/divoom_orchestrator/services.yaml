@@ -45,6 +45,15 @@ start:
 stop:
   name: Playlist stoppen
   description: Stoppt nach einem laufenden Bildtransfer; das letzte Bild bleibt angezeigt.
+trigger:
+  name: Triggered-Event auslösen
+  description: Löst ein aktiviertes Triggered-Event mit seiner gespeicherten Priorität aus.
+  fields:
+    name:
+      name: Eventname
+      required: true
+      selector:
+        text:
 brightness_test:
   name: Helligkeit testen
   description: Testet einen Helligkeitswert 30 Sekunden, danach gilt wieder die Automatik.
