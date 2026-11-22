@@ -36,6 +36,12 @@ start:
               label: Alphabetisch
             - value: random
               label: Zufällig
+    individual_durations:
+      name: Individuelle Anzeigezeiten
+      description: Nur GIFs mit gespeicherter individueller Dauer abspielen.
+      default: false
+      selector:
+        boolean:
 stop:
   name: Playlist stoppen
   description: Stoppt nach einem laufenden Bildtransfer; das letzte Bild bleibt angezeigt.
@@ -55,3 +61,6 @@ brightness_test:
 brightness_configure:
   name: Helligkeitsautomatik konfigurieren
   description: Speichert die Einstellungen der Helligkeitsautomatik. Im Seitenleisten-Panel konfigurieren.
+playlist_durations:
+  name: Individuelle GIF-Anzeigezeiten speichern
+  description: Speichert Anzeigezeiten für GIFs eines Ordners über das Seitenleisten-Panel.

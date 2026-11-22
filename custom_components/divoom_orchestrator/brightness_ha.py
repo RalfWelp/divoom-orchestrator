@@ -97,7 +97,9 @@ class BrightnessRuntime:
         state = event.data["new_state"]
         if entity_id == self.config["motion"]:
             self.controller.motion_changed(state is not None and state.state == "on")
-        if entity_id == self.config["connection"] and state and state.state == "connected":
+        old_state = event.data.get("old_state")
+        if (entity_id == self.config["connection"] and state and state.state == "connected"
+                and (old_state is None or old_state.state != "connected")):
             self.controller.connected()
             self._retry_at = 0.0
         self.request()

@@ -67,7 +67,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             Required=lambda key, **kwargs: key,
             Optional=lambda key, **kwargs: key,
             Schema=identity, All=identity, Coerce=identity, Range=identity,
-            In=identity, Length=identity, Match=identity,
+            In=identity, Length=identity, Match=identity, Invalid=ValueError,
         )
         ha = module("homeassistant")
         components = module("homeassistant.components")
@@ -80,6 +80,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             "homeassistant.components.websocket_api",
             require_admin=lambda func: func,
             websocket_command=lambda schema: lambda func: func,
+            async_response=lambda func: func,
             async_register_command=lambda *args: None,
         )
         config_validation = module(
@@ -148,6 +149,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         sys.modules.pop("test_divoom_orchestrator.panel", None)
         sys.modules.pop("test_divoom_orchestrator.brightness", None)
         sys.modules.pop("test_divoom_orchestrator.brightness_ha", None)
+        sys.modules.pop("test_divoom_orchestrator.playlist_ha", None)
 
     async def start(self, **overrides):
         data = {"device": "divoom_pixoo", "folder": "rain", "duration": 30, "order": "alphabetical"}
@@ -235,3 +237,39 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("divoom", "on", {"device": "pixoo"}), self.hass.services.calls)
         self.assertIn(("divoom", "brightness", {"device": "pixoo", "brightness": 100}), self.hass.services.calls)
         self.assertEqual(runtime._schedule(), 10)
+
+    async def test_per_file_durations_save_scan_and_preserve_other_folders(self):
+        runtime = self.hass.data["divoom_orchestrator"]["durations"]
+        runtime.values = {"other/file.gif": 22.0}
+        await runtime.save("rain", {"rain/one.gif": 5.0}, ["rain/one.gif"])
+        self.assertEqual(runtime.values, {"other/file.gif": 22.0, "rain/one.gif": 5.0})
+        runtime.store.async_save.assert_awaited_once_with(runtime.values)
+        with self.assertRaisesRegex(FakeError, "GIF list changed"):
+            await runtime.save("rain", {"../outside.gif": 4.0}, ["rain/one.gif"])
+        with self.assertRaisesRegex(FakeError, "GIF list changed"):
+            await runtime.save("rain", {}, [])
+        await runtime.save("rain", {}, ["rain/one.gif"])
+        self.assertEqual(runtime.values, {"other/file.gif": 22.0})
+
+    async def test_individual_playlist_uses_saved_durations(self):
+        runtime = self.hass.data["divoom_orchestrator"]["durations"]
+        await runtime.save("rain", {"rain/one.gif": 3.0}, ["rain/one.gif"])
+        await self.start(individual_durations=True)
+        await asyncio.sleep(0)
+        self.assertEqual(self.hass.services.calls[0],
+                         ("divoom", "image", {"device": "divoom_pixoo", "file": "rain/one.gif"}))
+
+    async def test_brightness_ignores_duplicate_connected_event(self):
+        runtime = self.hass.data["divoom_orchestrator"]["brightness"]
+        runtime.config["connection"] = "sensor.bt"
+        connected = types.SimpleNamespace(state="connected")
+        runtime.controller.connected = unittest.mock.Mock()
+        runtime._state_changed(types.SimpleNamespace(data={
+            "entity_id": "sensor.bt", "old_state": connected, "new_state": connected,
+        }))
+        runtime.controller.connected.assert_not_called()
+        runtime._state_changed(types.SimpleNamespace(data={
+            "entity_id": "sensor.bt", "old_state": types.SimpleNamespace(state="disconnected"),
+            "new_state": connected,
+        }))
+        runtime.controller.connected.assert_called_once()

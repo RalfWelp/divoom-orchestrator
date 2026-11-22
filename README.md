@@ -39,8 +39,16 @@ und Home Assistant validiert.
 
 Nach der Einrichtung erscheint für Administratoren **Divoom Orchestrator** in
 der Seitenleiste. Die erste Version bietet dort das Starten und Stoppen einer
-Ordner-Playlist. Gerätekennung und Ordner werden noch von Hand eingegeben und
-nicht dauerhaft gespeichert. Die Anzeige bestätigt lediglich die Startanfrage;
+Ordner-Playlist. Gerätekennung und Ordner werden von Hand eingegeben und
+nicht dauerhaft gespeichert. Mit **GIFs laden / aktualisieren** werden die
+Dateien des Ordners aufgelistet; für jede gewünschte Animation lässt sich eine
+eigene Anzeigezeit in Sekunden einstellen und speichern. Leere Felder und neue,
+noch nicht konfigurierte Dateien werden übersprungen. Die Zeiten sind pro
+relativem Dateipfad gespeichert und bleiben nach einem HA-Neustart erhalten;
+umbenannte oder verschobene Dateien müssen neu eingestellt werden.
+Sind keine konfigurierten Dateien vorhanden, lässt sich die Playlist nicht
+starten. Falls sich die Liste während des Bearbeitens ändert, muss sie vor dem
+Speichern neu geladen werden. Die Anzeige bestätigt lediglich die Startanfrage;
 spätere Wiedergabefehler erscheinen als HA-Benachrichtigung.
 
 Eine separat aktivierbare Helligkeitsautomatik ist ebenfalls im Panel
@@ -117,6 +125,12 @@ Automation einrichten.
 Andere Divoom-Aktionen können das aktuelle Bild überschreiben, stoppen die
 Playlist aber nicht. Event-Prioritäten und das automatische Fortsetzen einer
 Rotation sind noch nicht implementiert.
+
+Die Aktion `divoom_orchestrator.start` verwendet aus Gründen der
+Abwärtskompatibilität weiterhin die gemeinsame `duration`. Mit
+`individual_durations: true` gelten stattdessen die im Panel gespeicherten
+Einzelzeiten; unkonfigurierte GIFs werden ausgelassen. Die Anzeigezeit beginnt
+jeweils nach Abschluss der Übertragung, nicht mit deren Beginn.
 
 ## Tests
 

@@ -18,6 +18,7 @@ from homeassistant.helpers.typing import ConfigType
 from .playlist import PlaylistController, scan_gifs
 from .panel import async_register_panel
 from .brightness_ha import BrightnessRuntime, register as register_brightness
+from .playlist_ha import PlaylistDurations, register as register_playlist
 
 DOMAIN = "divoom_orchestrator"
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ START_SCHEMA = vol.Schema(
         vol.Required("folder"): vol.All(cv.string, vol.Length(min=1)),
         vol.Required("duration"): vol.All(vol.Coerce(float), vol.Range(min=1, max=3600)),
         vol.Optional("order", default="alphabetical"): vol.In(["alphabetical", "random"]),
+        vol.Optional("individual_durations", default=False): cv.boolean,
     }
 )
 
@@ -37,6 +39,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data.setdefault(DOMAIN, {})
     await async_register_panel(hass)
     register_brightness(hass)
+    register_playlist(hass)
 
     def controller() -> PlaylistController:
         instance = hass.data[DOMAIN].get("controller")
@@ -59,12 +62,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             return await hass.async_add_executor_job(scan_gifs, root, folder, shuffle)
 
         async def show(filename: str) -> None:
-            await hass.services.async_call(
-                "divoom", "image", {"device": device, "file": filename}, blocking=True
-            )
+            try:
+                await hass.services.async_call(
+                    "divoom", "image", {"device": device, "file": filename}, blocking=True
+                )
+            except (HomeAssistantError, OSError) as err:
+                raise HomeAssistantError(f"Failed to display {filename}: {err}") from err
 
         try:
-            await controller().start(scan, show, duration)
+            durations = hass.data[DOMAIN].get("durations")
+            if call.data.get("individual_durations", False) and durations is None:
+                raise HomeAssistantError("Playlist durations are not loaded")
+            duration_for = None
+            if call.data.get("individual_durations", False):
+                duration_for = lambda filename: durations.values.get(filename)
+            await controller().start(scan, show, duration, duration_for)
         except (OSError, ValueError) as err:
             raise HomeAssistantError(f"Cannot start Divoom playlist: {err}") from err
 
@@ -98,9 +110,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def create_task(coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
         return hass.async_create_background_task(coro, "Divoom playlist")
 
-    hass.data[DOMAIN]["controller"] = PlaylistController(create_task, report_error)
+    durations = PlaylistDurations(hass)
+    await durations.load()
     brightness = BrightnessRuntime(hass)
     await brightness.start()
+    hass.data[DOMAIN]["controller"] = PlaylistController(create_task, report_error)
+    hass.data[DOMAIN]["durations"] = durations
     hass.data[DOMAIN]["brightness"] = brightness
     return True
 
@@ -109,6 +124,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Stop the playlist before unloading."""
     instance = hass.data[DOMAIN].pop("controller", None)
     brightness = hass.data[DOMAIN].pop("brightness", None)
+    hass.data[DOMAIN].pop("durations", None)
     if brightness is not None:
         await brightness.stop()
     if instance is not None:

@@ -77,6 +77,30 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(wait.call_count, 3)
         self.assertTrue(all(call.kwargs == {"timeout": 4} for call in wait.call_args_list))
 
+    async def test_individual_times_and_skip_new_unconfigured_files(self):
+        scan = AsyncMock(side_effect=[["b.gif", "new.gif", "a.gif"], asyncio.CancelledError()])
+        show = AsyncMock()
+        durations = {"a.gif": 3, "b.gif": 7}
+
+        async def timeout(waiter, *, timeout):
+            waiter.close()
+            raise TimeoutError
+
+        with patch.object(playlist.asyncio, "wait_for", side_effect=timeout) as wait:
+            with self.assertRaises(asyncio.CancelledError):
+                await playlist.play(
+                    scan, show, 10, asyncio.Event(),
+                    ["a.gif", "missing.gif", "b.gif"], durations.get,
+                )
+        self.assertEqual([call.args[0] for call in show.await_args_list],
+                         ["a.gif", "b.gif", "b.gif", "a.gif"])
+        self.assertEqual([call.kwargs["timeout"] for call in wait.call_args_list], [3, 7, 7, 3])
+
+    async def test_manual_playlist_rejects_all_unconfigured(self):
+        controller = playlist.PlaylistController(asyncio.create_task, AsyncMock())
+        with self.assertRaisesRegex(ValueError, "configured duration"):
+            await controller.start(AsyncMock(return_value=["new.gif"]), AsyncMock(), 10, {}.get)
+
     async def test_empty_folder_and_send_errors_are_not_silent(self):
         with self.assertRaisesRegex(ValueError, "no GIF"):
             await playlist.play(AsyncMock(), AsyncMock(), 1, asyncio.Event(), [])

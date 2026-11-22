@@ -41,6 +41,9 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .error { color:var(--error-color,#b00020); }
         .upcoming { border-left:4px solid var(--primary-color,#16889a); padding-left:14px; }
         .upcoming p { margin:6px 0; }
+        .gif-row { display:flex; align-items:center; gap:12px; margin-top:10px; }
+        .gif-row span { flex:1; overflow-wrap:anywhere; }
+        .gif-row input { width:95px; margin:0; }
       </style>
       <header><button id="menu" aria-label="Menü öffnen">☰</button><h1>Divoom Orchestrator</h1></header>
       <main>
@@ -51,12 +54,15 @@ class DivoomOrchestratorPanel extends HTMLElement {
         <div class="grid">
           <section class="card">
             <h3>Ordner-Playlist</h3>
-            <p class="muted">GIFs aus einem Ordner wiederholt abspielen. Die Dateiliste wird nach jedem Durchlauf aktualisiert.</p>
+            <p class="muted">GIFs aus einem Ordner wiederholt abspielen. Neue Dateien ohne gespeicherte Dauer werden übersprungen.</p>
             <form id="playlist">
               <label>Gerätekennung<input name="device" value="divoom_pixoo" required autocomplete="off"></label>
               <label>Ordner unter pixelart<input name="folder" value="." required autocomplete="off"></label>
-              <label>Anzeigezeit je GIF (Sekunden)<input name="duration" type="number" value="10" min="1" max="3600" step="1" required></label>
               <label>Reihenfolge<select name="order"><option value="alphabetical">Alphabetisch</option><option value="random">Zufällig</option></select></label>
+              <div class="actions"><button type="button" class="secondary" id="load-gifs">GIFs laden / aktualisieren</button></div>
+              <p class="muted">Für jede gewünschte Animation Sekunden eintragen (1–3600). Leer bedeutet: nicht abspielen.</p>
+              <div id="gif-list"></div>
+              <div class="actions"><button type="button" class="secondary" id="save-gifs" disabled>Anzeigezeiten speichern</button></div>
               <div class="actions"><button type="submit" class="primary">▶ Playlist starten</button><button type="button" class="secondary" id="stop">■ Stoppen</button></div>
               <p id="message" class="message" role="status" aria-live="polite"></p>
             </form>
@@ -102,11 +108,16 @@ class DivoomOrchestratorPanel extends HTMLElement {
       }
       if (!form.reportValidity()) return;
       const data = new FormData(form);
+      if (this._gifFolder !== data.get("folder").trim() || this._gifDirty) {
+        this._playlistMessage("Bitte GIFs laden und Änderungen an Anzeigezeiten speichern.", true);
+        return;
+      }
       this._call("start", {
         device: data.get("device").trim(),
         folder: data.get("folder").trim(),
-        duration: Number(data.get("duration")),
+        duration: 10,
         order: data.get("order"),
+        individual_durations: true,
       });
     });
     for (const name of ["device", "folder"]) {
@@ -115,6 +126,16 @@ class DivoomOrchestratorPanel extends HTMLElement {
       });
     }
     this.shadowRoot.querySelector("#stop").addEventListener("click", () => this._call("stop", {}));
+    const playlist = this.shadowRoot.querySelector("#playlist");
+    playlist.elements.folder.addEventListener("input", () => {
+      this._gifRevision = (this._gifRevision || 0) + 1;
+      this._updateGifButtons();
+      if (this._gifFolder && playlist.elements.folder.value.trim() !== this._gifFolder) {
+        this._playlistMessage(`Die angezeigten GIFs gehören noch zu "${this._gifFolder}".`);
+      }
+    });
+    this.shadowRoot.querySelector("#load-gifs").addEventListener("click", () => this._loadGifs());
+    this.shadowRoot.querySelector("#save-gifs").addEventListener("click", () => this._saveGifs());
     const brightness = this.shadowRoot.querySelector("#brightness");
     brightness.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -139,6 +160,104 @@ class DivoomOrchestratorPanel extends HTMLElement {
       });
     });
     this._loadBrightness();
+  }
+
+  _playlistMessage(text, error = false) {
+    const message = this.shadowRoot.querySelector("#message");
+    message.textContent = text;
+    message.classList.toggle("error", error);
+  }
+
+  _updateGifButtons() {
+    const form = this.shadowRoot.querySelector("#playlist");
+    this.shadowRoot.querySelector("#load-gifs").disabled = !!this._gifBusy;
+    this.shadowRoot.querySelector("#save-gifs").disabled = !!this._gifBusy ||
+      !this._gifFolder || form.elements.folder.value.trim() !== this._gifFolder;
+  }
+
+  async _loadGifs() {
+    if (this._gifBusy) return;
+    const form = this.shadowRoot.querySelector("#playlist");
+    const folder = form.elements.folder.value.trim();
+    if (!folder) {
+      this._playlistMessage("Bitte einen Ordner eingeben.", true);
+      return;
+    }
+    if (this._gifDirty && !window.confirm("Ungespeicherte Anzeigezeiten verwerfen?")) return;
+    const revision = this._gifRevision;
+    this._gifBusy = true;
+    this._updateGifButtons();
+    this._playlistMessage("GIFs werden geladen …");
+    try {
+      const files = await this._hass.callWS({ type: "divoom_orchestrator/playlist_files", folder });
+      if (form.elements.folder.value.trim() !== folder || this._gifRevision !== revision) {
+        this._playlistMessage("Die Eingaben haben sich geändert; bitte erneut laden.", true);
+        return;
+      }
+      const list = this.shadowRoot.querySelector("#gif-list");
+      list.replaceChildren();
+      for (const entry of files) {
+        const label = document.createElement("label");
+        label.className = "gif-row";
+        const text = document.createElement("span");
+        text.textContent = entry.file;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "1";
+        input.max = "3600";
+        input.step = "any";
+        input.placeholder = "Sek.";
+        input.value = entry.duration ?? "";
+        input.dataset.file = entry.file;
+        input.setAttribute("aria-label", `Sekunden für ${entry.file}`);
+        input.addEventListener("input", () => {
+          this._gifDirty = true;
+          this._gifRevision = (this._gifRevision || 0) + 1;
+        });
+        label.append(text, input);
+        list.appendChild(label);
+      }
+      this._gifFolder = folder;
+      this._gifDirty = false;
+      this._playlistMessage(`${files.length} GIF(s) gefunden. Leere Felder werden übersprungen.`);
+    } catch (error) {
+      this._playlistMessage(`Ordner konnte nicht gelesen werden: ${error.message || String(error)}`, true);
+    } finally {
+      this._gifBusy = false;
+      this._updateGifButtons();
+    }
+  }
+
+  async _saveGifs() {
+    const form = this.shadowRoot.querySelector("#playlist");
+    if (this._gifBusy || !this._gifFolder || form.elements.folder.value.trim() !== this._gifFolder) return;
+    const durations = {};
+    const files = [];
+    for (const input of this.shadowRoot.querySelectorAll("#gif-list input")) {
+      if (!input.reportValidity()) return;
+      files.push(input.dataset.file);
+      if (input.value !== "") durations[input.dataset.file] = Number(input.value);
+    }
+    const folder = this._gifFolder;
+    const revision = this._gifRevision;
+    this._gifBusy = true;
+    this._updateGifButtons();
+    try {
+      await this._hass.callService("divoom_orchestrator", "playlist_durations", {
+        folder, durations, files,
+      });
+      if (this._gifFolder === folder && this._gifRevision === revision) {
+        this._gifDirty = false;
+        this._playlistMessage("Anzeigezeiten gespeichert.");
+      } else {
+        this._playlistMessage("Gespeichert; neuere Änderungen sind noch nicht gespeichert.");
+      }
+    } catch (error) {
+      this._playlistMessage(`Speichern fehlgeschlagen: ${error.message || String(error)}`, true);
+    } finally {
+      this._gifBusy = false;
+      this._updateGifButtons();
+    }
   }
 
   async _loadBrightness() {
@@ -201,7 +320,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
   async _call(action, data) {
     if (this._busy) return;
     this._busy = true;
-    const buttons = this.shadowRoot.querySelectorAll(".actions button");
+    const buttons = this.shadowRoot.querySelectorAll('#playlist button[type="submit"], #stop');
     const message = this.shadowRoot.querySelector("#message");
     buttons.forEach((button) => { button.disabled = true; });
     message.textContent = action === "start" ? "Playlist wird gestartet …" : "Playlist wird gestoppt …";

@@ -42,6 +42,7 @@ async def play(
     duration: float,
     stop: asyncio.Event,
     first: list[str],
+    duration_for: Callable[[str], float | None] | None = None,
 ) -> None:
     """Repeat playlists, refreshing the file list at each cycle."""
     if not math.isfinite(duration) or duration <= 0:
@@ -49,20 +50,30 @@ async def play(
     files = first
     while not stop.is_set():
         if not files:
-            raise ValueError("The playlist directory contains no GIF files")
+            message = "The playlist directory contains no GIF files"
+            if duration_for is not None:
+                message += " with a configured duration"
+            raise ValueError(message)
         for filename in files:
             if stop.is_set():
                 return
+            seconds = duration if duration_for is None else duration_for(filename)
+            if seconds is None:
+                continue
+            if not math.isfinite(seconds) or not 1 <= seconds <= 3600:
+                raise ValueError(f"Invalid display duration for {filename}")
             await show(filename)
             if stop.is_set():
                 return
             try:
-                await asyncio.wait_for(stop.wait(), timeout=duration)
+                await asyncio.wait_for(stop.wait(), timeout=seconds)
                 return
             except TimeoutError:
                 pass
         if not stop.is_set():
             files = await scan()
+            if duration_for is not None:
+                files = [filename for filename in files if duration_for(filename) is not None]
 
 
 class PlaylistController:
@@ -84,6 +95,7 @@ class PlaylistController:
         scan: Callable[[], Awaitable[list[str]]],
         show: Callable[[str], Awaitable[None]],
         duration: float,
+        duration_for: Callable[[str], float | None] | None = None,
     ) -> None:
         async with self._lock:
             if self._task is not None and not self._task.done():
@@ -91,13 +103,18 @@ class PlaylistController:
             if not math.isfinite(duration) or duration <= 0:
                 raise ValueError("Duration must be positive")
             first = await scan()
+            if duration_for is not None:
+                first = [filename for filename in first if duration_for(filename) is not None]
             if not first:
-                raise ValueError("The playlist directory contains no GIF files")
+                message = "The playlist directory contains no GIF files"
+                if duration_for is not None:
+                    message += " with a configured duration"
+                raise ValueError(message)
             self._stop = asyncio.Event()
 
             async def run() -> None:
                 try:
-                    await play(scan, show, duration, self._stop, first)
+                    await play(scan, show, duration, self._stop, first, duration_for)
                 except Exception as err:
                     await self._on_error(err)
 

@@ -10,7 +10,9 @@
     const panel = document.createElement("divoom-orchestrator-panel");
     panel.hass = {
       states: {},
-      callWS: async () => ({
+      callWS: async (request) => request.type === "divoom_orchestrator/playlist_files"
+        ? [{file: "cloudy.gif", duration: 12}, {file: "new.gif", duration: null}]
+        : ({
         enabled: true, device: "divoom_pixoo", motion: "", connection: "",
         morning: "05:00", day: 100, twilight: 50, night: 10,
       }),
