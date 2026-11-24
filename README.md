@@ -114,7 +114,10 @@ ist noch nicht angebunden.
 ### Rotation
 
 Über **Bearbeiten** an der Startanimation einen Ordner laden, GIFs auswählen,
-sortieren und die jeweilige Dauer speichern. Die Startabfolge steht am Anfang
+sortieren und die jeweilige Dauer einstellen. Wetter und Textblöcke werden in
+eigenen Dialogen bearbeitet. **Fertig** schließt den Dialog und behält die
+Änderungen als Entwurf; erst **Rotation speichern** in der Übersicht speichert
+alle Änderungen dauerhaft. Die Startabfolge steht am Anfang
 jedes Durchlaufs; optional folgen ein Wetterblock, mehrere Textblöcke und alle
 aktiven Datums-Events alphabetisch. Ihre Reihenfolge lässt sich per Drag & Drop ändern und im
 Rotationseditor speichern. Änderungen werden beim nächsten Durchlauf übernommen. Bei

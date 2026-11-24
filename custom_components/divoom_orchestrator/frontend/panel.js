@@ -72,6 +72,8 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .rotation-description strong, .rotation-description span { display:block; }
         .rotation-description span { color:var(--panel-muted); font-size:13px; margin-top:4px; }
         .rotation-badge { flex:none; color:var(--panel-muted); font-size:12px; }
+        dialog.rotation-dialog { width:min(680px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:1px solid var(--panel-divider); border-radius:16px; padding:24px; background:var(--panel-card); color:var(--panel-text); box-shadow:0 12px 40px #0006; }
+        dialog.rotation-dialog::backdrop { background:#0009; }
         @media (max-width:700px) { .event-layout { grid-template-columns:1fr; } }
       </style>
       <header><button id="menu" aria-label="Menü öffnen">☰</button><h1>Divoom Orchestrator</h1></header>
@@ -156,30 +158,34 @@ class DivoomOrchestratorPanel extends HTMLElement {
           </section>
           <section class="card wide">
             <h3>Rotation</h3>
-            <p class="muted">Blöcke per Drag &amp; Drop verschieben; anschließend in der Rotation speichern. Die Startanimation bleibt immer vorn.</p>
+            <p class="muted">Blöcke bearbeiten oder per Drag &amp; Drop verschieben. Änderungen anschließend mit „Rotation speichern“ übernehmen. Die Startanimation bleibt immer vorn.</p>
             <ol class="rotation-preview" id="rotation-blocks" aria-label="Rotationsablauf">
               <li class="rotation-block"><span class="rotation-icon" aria-hidden="true">✨</span><span class="rotation-description"><strong>Startanimation</strong><span>Ausgewählte GIFs · am Anfang jedes Durchlaufs</span></span><span class="rotation-badge">🔒 Fest</span><button type="button" class="secondary" id="rotation-edit">Bearbeiten</button></li>
               <li class="rotation-block" data-block="weather" draggable="true"><span class="rotation-icon" aria-hidden="true">🌤️</span><span class="rotation-description"><strong>Wetter</strong><span>Aktuelle Wetteranzeige · verschiebbar</span></span><button type="button" class="secondary" id="rotation-weather-edit">Bearbeiten</button></li>
               <li class="rotation-block" data-block="date" draggable="true"><span class="rotation-icon" aria-hidden="true">📅</span><span class="rotation-description"><strong>Aktive Datums-Events</strong><span>Alle aktiven Events · alphabetisch · verschiebbar</span></span><button type="button" class="secondary" id="rotation-dates-edit">Bearbeiten</button></li>
             </ol>
             <div class="actions"><button type="button" class="secondary" id="rotation-text-add">+ Textblock hinzufügen</button></div>
+            <label><input id="rotation-date-enabled" type="checkbox" checked>Aktive Datums-Events abspielen</label>
+            <label>Fehlerbild-Anzeigedauer für alle Blöcke (Sekunden)<input id="rotation-error-seconds" type="number" min="0.01" max="3600" step="any" value="5"></label>
+            <div class="actions"><button type="button" class="primary" id="rotation-save">Rotation speichern</button></div>
             <div class="actions"><button type="button" class="primary" id="rotation-start">▶ Rotation starten</button><button type="button" class="secondary" id="rotation-stop">■ Rotation stoppen</button></div>
             <p id="rotation-message" class="message" role="status" aria-live="polite"></p>
-            <div id="rotation-editor" hidden>
-              <h3>Rotation konfigurieren</h3>
+            <dialog id="rotation-editor" class="rotation-dialog" aria-labelledby="rotation-dialog-title" aria-describedby="rotation-dialog-help">
+              <h3 id="rotation-dialog-title"></h3>
+              <p id="rotation-dialog-help" class="muted">Änderungen bleiben als Entwurf erhalten. Nach dem Schließen mit „Rotation speichern“ dauerhaft speichern.</p>
+              <div id="rotation-start-editor" hidden>
               <label>Ordner unter pixelart<input id="rotation-folder" value="rotation" autocomplete="off"></label>
               <div class="actions"><button type="button" class="secondary" id="rotation-load">GIFs laden</button></div>
               <p class="muted">GIFs auswählen, mit den Pfeilen sortieren und Sekunden oder geschätzte Durchläufe einstellen.</p>
               <div id="rotation-list"></div>
-              <label><input id="rotation-date-enabled" type="checkbox" checked>Aktive Datums-Events abspielen</label>
+              </div>
+              <div id="rotation-weather-settings" hidden>
               <label><input id="rotation-weather-enabled" type="checkbox">Wetter abspielen</label>
-              <div id="rotation-weather-settings">
                 <label>Wetter-Entität<select id="rotation-weather-entity"><option value="">Bitte auswählen</option></select></label>
                 <label>Wetter-Anzeigedauer (Sekunden)<input id="rotation-weather-seconds" type="number" min="0.01" max="3600" step="any" value="10"></label>
                 <p class="muted">GIFs aus wetter/&lt;HA-Wetterzustand&gt;/tag oder /nacht; neue Dateien werden automatisch berücksichtigt.</p>
               </div>
               <div id="rotation-text-editor" hidden>
-                <h3>Textblock bearbeiten</h3>
                 <label>Name<input id="text-name" maxlength="80"></label>
                 <label>Quelle<select id="text-source"><option value="fixed">Fester Text</option><option value="entity">HA-Entität oder Attribut</option><option value="list">TXT-Liste</option></select></label>
                 <div id="text-fixed-group"><label>Text<input id="text-fixed" maxlength="4096"></label></div>
@@ -201,9 +207,9 @@ class DivoomOrchestratorPanel extends HTMLElement {
                 <p class="muted">Durchläufe sind nur grob geschätzt und nicht mit dem Display synchronisiert.</p>
                 <div class="actions"><button type="button" class="secondary" id="text-remove">Textblock entfernen</button></div>
               </div>
-              <label>Fehlerbild-Anzeigedauer (Sekunden)<input id="rotation-error-seconds" type="number" min="0.01" max="3600" step="any" value="5"></label>
-              <div class="actions"><button type="button" class="primary" id="rotation-save">Rotation speichern</button></div>
-            </div>
+              <p id="rotation-dialog-message" class="message" role="status" aria-live="polite"></p>
+              <div class="actions"><button type="button" class="secondary" id="rotation-dialog-close">Fertig</button></div>
+            </dialog>
           </section>
           <section class="card">
             <details>
@@ -328,14 +334,27 @@ class DivoomOrchestratorPanel extends HTMLElement {
   }
 
   _rotationMessage(text, error = false) {
-    const message = this.shadowRoot.querySelector("#rotation-message");
-    message.textContent = text;
-    message.classList.toggle("error", error);
+    for (const id of ["rotation-message", "rotation-dialog-message"]) {
+      const message = this.shadowRoot.querySelector(`#${id}`);
+      message.textContent = text;
+      message.classList.toggle("error", error);
+    }
   }
 
   _rotationChanged() {
     this._rotationDirty = true;
     this._rotationRevision++;
+    this._rotationMessage("Ungespeicherte Änderungen – bitte Rotation speichern.");
+  }
+
+  _rotationDialog(section, title) {
+    const root = this.shadowRoot;
+    for (const name of ["start-editor", "weather-settings", "text-editor"]) {
+      root.querySelector(`#rotation-${name}`).hidden = name !== section;
+    }
+    root.querySelector("#rotation-dialog-title").textContent = title;
+    const dialog = root.querySelector("#rotation-editor");
+    if (!dialog.open) dialog.showModal();
   }
 
   _newTextId() {
@@ -349,9 +368,16 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this._rotationDirty = false;
     this._rotationRevision = 0;
     this._rotationTexts = Object.create(null);
-    get("edit").addEventListener("click", () => { get("editor").hidden = !get("editor").hidden; });
+    get("edit").addEventListener("click", () => this._rotationDialog("start-editor", "Startanimation bearbeiten"));
     get("dates-edit").addEventListener("click", () => this._showPage("events"));
-    get("weather-edit").addEventListener("click", () => { get("editor").hidden = false; get("weather-entity").focus(); });
+    get("weather-edit").addEventListener("click", () => this._rotationDialog("weather-settings", "Wetter bearbeiten"));
+    get("dialog-close").addEventListener("click", () => get("editor").close());
+    get("editor").addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        get("editor").close();
+      }
+    });
     get("folder").addEventListener("input", () => this._rotationChanged());
     get("date-enabled").addEventListener("change", () => this._rotationChanged());
     for (const id of ["weather-enabled", "weather-entity", "weather-seconds"]) {
@@ -438,10 +464,19 @@ class DivoomOrchestratorPanel extends HTMLElement {
     }).catch((error) => this._rotationMessage(`Rotation konnte nicht geladen werden: ${error.message || String(error)}`, true));
   }
 
-  async _rotationLoadFiles(saved = []) {
+  async _rotationLoadFiles(saved = null) {
     const folder = this.shadowRoot.querySelector("#rotation-folder").value.trim();
     if (!folder) return this._rotationMessage("Bitte einen Ordner eingeben.", true);
-    if (this._rotationDirty && !window.confirm("Ungespeicherte Rotationseinstellungen verwerfen?")) return;
+    const list = this.shadowRoot.querySelector("#rotation-list");
+    if (saved === null) {
+      const selected = Array.from(list.children)
+        .filter((row) => row.querySelector('input[type="checkbox"]').checked)
+        .map((row) => ({file: row.dataset.file, mode: row.querySelector("select").value,
+          value: Number(row.querySelector('input[type="number"]').value)}));
+      if (this._rotationFolder && this._rotationFolder !== folder && selected.length &&
+          !window.confirm("GIF-Auswahl des bisherigen Startordners verwerfen?")) return;
+      saved = this._rotationFolder === folder ? selected : [];
+    }
     const revision = this._rotationRevision;
     try {
       const entries = await this._hass.callWS({type: "divoom_orchestrator/playlist_files", folder});
@@ -451,13 +486,11 @@ class DivoomOrchestratorPanel extends HTMLElement {
       }
       this._rotationFolder = folder;
       this._rotationFiles = entries.map((entry) => entry.file);
-      const list = this.shadowRoot.querySelector("#rotation-list");
       list.replaceChildren();
       const selected = new Set(saved.map((step) => step.file));
       for (const step of saved) this._rotationRow(step.file, step);
       for (const file of this._rotationFiles) if (!selected.has(file)) this._rotationRow(file, null);
-      if (saved.length) this._rotationDirty = false;
-      this._rotationMessage(`${entries.length} GIF(s) geladen.`);
+      this._rotationMessage(`${entries.length} GIF(s) geladen.${this._rotationDirty ? " Ungespeicherte Änderungen – bitte Rotation speichern." : ""}`);
       this._eventPreviews(folder, Array.from(list.children), this._rotationFiles);
     } catch (error) {
       this._rotationFiles = null;
@@ -520,6 +553,8 @@ class DivoomOrchestratorPanel extends HTMLElement {
           const block = [...this.shadowRoot.querySelectorAll("#rotation-blocks [data-block]")]
             .find((item) => item.dataset.block === this._editingText);
           if (block) block.querySelector("strong").textContent = settings.name || "Text";
+          this.shadowRoot.querySelector("#rotation-dialog-title").textContent =
+            `Textblock bearbeiten: ${settings.name || "Text"}`;
         }
         if (field === "source") this._textSource();
       };
@@ -565,7 +600,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
       if (block) block.remove();
       delete this._rotationTexts[id];
       this._editingText = null;
-      this.shadowRoot.querySelector("#rotation-text-editor").hidden = true;
+      this.shadowRoot.querySelector("#rotation-editor").close();
       this._rotationChanged();
     });
   }
@@ -581,8 +616,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     const settings = this._rotationTexts[id];
     if (!settings) return;
     this._editingText = id;
-    this.shadowRoot.querySelector("#rotation-editor").hidden = false;
-    this.shadowRoot.querySelector("#rotation-text-editor").hidden = false;
+    this._rotationDialog("text-editor", `Textblock bearbeiten: ${settings.name || "Text"}`);
     const fields = {name: "name", source: "source", fixed: "text", entity: "entity",
       attribute: "attribute", selection: "selection", size: "size", time: "time",
       "duration-mode": "duration_mode", duration: "duration"};
@@ -590,7 +624,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     for (const name of ["foreground", "background"]) {
       this.shadowRoot.querySelector(`#text-${name}`).value = `#${settings[name].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
     }
-    this.shadowRoot.querySelector("#text-list-status").textContent = `${settings.lines.length} Zeilen gespeichert.`;
+    this.shadowRoot.querySelector("#text-list-status").textContent = `${settings.lines.length} Zeilen im Textblock.`;
     this._textSource();
     this.shadowRoot.querySelector("#text-name").focus();
   }
@@ -598,19 +632,29 @@ class DivoomOrchestratorPanel extends HTMLElement {
   async _rotationSave() {
     const get = (name) => this.shadowRoot.querySelector(`#rotation-${name}`);
     if (!this._rotationFiles || get("folder").value.trim() !== this._rotationFolder) {
+      this._rotationDialog("start-editor", "Startanimation bearbeiten");
       return this._rotationMessage("Bitte zuerst den Ordner laden.", true);
     }
     const steps = [];
     for (const row of get("list").children) {
       if (!row.querySelector('input[type="checkbox"]').checked) continue;
       const input = row.querySelector('input[type="number"]');
-      if (!input.reportValidity()) return;
+      if (!input.checkValidity()) {
+        this._rotationDialog("start-editor", "Startanimation bearbeiten");
+        input.reportValidity();
+        return;
+      }
       steps.push({file: row.dataset.file, mode: row.querySelector("select").value, value: Number(input.value)});
     }
-    if (!steps.length) return this._rotationMessage("Bitte mindestens ein GIF auswählen.", true);
+    if (!steps.length) {
+      this._rotationDialog("start-editor", "Startanimation bearbeiten");
+      return this._rotationMessage("Bitte mindestens ein GIF auswählen.", true);
+    }
     if (!get("error-seconds").reportValidity()) return;
     if (get("weather-enabled").checked &&
-        (!get("weather-entity").value || !get("weather-seconds").reportValidity())) {
+        (!get("weather-entity").value || !get("weather-seconds").checkValidity())) {
+      this._rotationDialog("weather-settings", "Wetter bearbeiten");
+      if (!get("weather-seconds").checkValidity()) get("weather-seconds").reportValidity();
       return this._rotationMessage("Bitte Wetter-Entität und Anzeigedauer wählen.", true);
     }
     const blocks = [...get("blocks").querySelectorAll("[data-block]")]
