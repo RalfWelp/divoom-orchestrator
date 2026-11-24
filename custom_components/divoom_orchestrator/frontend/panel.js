@@ -80,9 +80,12 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .rotation-description strong, .rotation-description span { display:block; }
         .rotation-description span { color:var(--panel-muted); font-size:13px; margin-top:4px; }
         .rotation-badge { flex:none; color:var(--panel-muted); font-size:12px; }
+        .rotation-toggle { display:flex; flex:none; align-items:center; gap:6px; margin:0; font-size:13px; font-weight:normal; }
+        .rotation-toggle input { width:auto; margin:0; accent-color:var(--primary-color,#16889a); }
+        .rotation-block:has(.rotation-toggle input:not(:checked)) .rotation-description { opacity:.65; }
         dialog.rotation-dialog { width:min(680px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:1px solid var(--panel-divider); border-radius:16px; padding:24px; background:var(--panel-card); color:var(--panel-text); box-shadow:0 12px 40px #0006; }
         dialog.rotation-dialog::backdrop { background:#0009; }
-        @media (max-width:700px) { .event-layout { grid-template-columns:1fr; } }
+        @media (max-width:700px) { .event-layout { grid-template-columns:1fr; } .rotation-block { flex-wrap:wrap; } }
       </style>
       <header><button id="menu" aria-label="Menü öffnen">☰</button><h1>Divoom Orchestrator</h1></header>
       <main>
@@ -169,11 +172,10 @@ class DivoomOrchestratorPanel extends HTMLElement {
             <p class="muted">Blöcke bearbeiten oder per Drag &amp; Drop verschieben. Änderungen anschließend mit „Rotation speichern“ übernehmen. Die Startanimation bleibt immer vorn.</p>
             <ol class="rotation-preview" id="rotation-blocks" aria-label="Rotationsablauf">
               <li class="rotation-block"><span class="rotation-icon" aria-hidden="true">✨</span><span class="rotation-description"><strong>Startanimation</strong><span>Ausgewählte GIFs · am Anfang jedes Durchlaufs</span></span><span class="rotation-badge">🔒 Fest</span><button type="button" class="secondary" id="rotation-edit">Bearbeiten</button></li>
-              <li class="rotation-block" data-block="weather" draggable="true"><span class="rotation-icon" aria-hidden="true">🌤️</span><span class="rotation-description"><strong>Wetter</strong><span>Aktuelle Wetteranzeige · verschiebbar</span></span><button type="button" class="secondary" id="rotation-weather-edit">Bearbeiten</button></li>
-              <li class="rotation-block" data-block="date" draggable="true"><span class="rotation-icon" aria-hidden="true">📅</span><span class="rotation-description"><strong>Aktive Datums-Events</strong><span>Alle aktiven Events · alphabetisch · verschiebbar</span></span><button type="button" class="secondary" id="rotation-dates-edit">Bearbeiten</button></li>
+              <li class="rotation-block" data-block="weather" draggable="true"><span class="rotation-icon" aria-hidden="true">🌤️</span><span class="rotation-description"><strong>Wetter</strong><span>Aktuelle Wetteranzeige · verschiebbar</span></span><label class="rotation-toggle"><input id="rotation-weather-enabled" type="checkbox" aria-label="Wetter aktivieren"><span>Inaktiv</span></label><button type="button" class="secondary" id="rotation-weather-edit">Bearbeiten</button></li>
+              <li class="rotation-block" data-block="date" draggable="true"><span class="rotation-icon" aria-hidden="true">📅</span><span class="rotation-description"><strong>Aktive Datums-Events</strong><span>Alle aktiven Events · alphabetisch · verschiebbar</span></span><label class="rotation-toggle"><input id="rotation-date-enabled" type="checkbox" aria-label="Datums-Events aktivieren" checked><span>Aktiv</span></label><button type="button" class="secondary" id="rotation-dates-edit">Bearbeiten</button></li>
             </ol>
             <div class="actions"><button type="button" class="secondary" id="rotation-text-add">+ Textblock hinzufügen</button></div>
-            <label><input id="rotation-date-enabled" type="checkbox" checked>Aktive Datums-Events abspielen</label>
             <label>Fehlerbild-Anzeigedauer für alle Blöcke (Sekunden)<input id="rotation-error-seconds" type="number" min="0.01" max="3600" step="any" value="5"></label>
             <div class="actions"><button type="button" class="primary" id="rotation-save">Rotation speichern</button></div>
             <div class="actions"><button type="button" class="primary" id="rotation-start">▶ Rotation starten</button><button type="button" class="secondary" id="rotation-stop">■ Rotation stoppen</button></div>
@@ -188,7 +190,6 @@ class DivoomOrchestratorPanel extends HTMLElement {
               <div id="rotation-list"></div>
               </div>
               <div id="rotation-weather-settings" hidden>
-              <label><input id="rotation-weather-enabled" type="checkbox">Wetter abspielen</label>
                 <label>Wetter-Entität<select id="rotation-weather-entity"><option value="">Bitte auswählen</option></select></label>
                 <label>Wetter-Anzeigedauer (Sekunden)<input id="rotation-weather-seconds" type="number" min="0.01" max="3600" step="any" value="10"></label>
                 <p class="muted">GIFs aus wetter/&lt;HA-Wetterzustand&gt;/tag oder /nacht; neue Dateien werden automatisch berücksichtigt.</p>
@@ -364,6 +365,18 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this._rotationMessage("Ungespeicherte Änderungen – bitte Rotation speichern.");
   }
 
+  _rotationToggle(block) {
+    const input = block.querySelector(".rotation-toggle input");
+    const update = () => {
+      input.nextElementSibling.textContent = input.checked ? "Aktiv" : "Inaktiv";
+    };
+    input.addEventListener("change", () => {
+      update();
+      this._rotationChanged();
+    });
+    update();
+  }
+
   _rotationDialog(section, title) {
     const root = this.shadowRoot;
     for (const name of ["start-editor", "weather-settings", "text-editor"]) {
@@ -396,8 +409,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
       }
     });
     get("folder").addEventListener("input", () => this._rotationChanged());
-    get("date-enabled").addEventListener("change", () => this._rotationChanged());
-    for (const id of ["weather-enabled", "weather-entity", "weather-seconds"]) {
+    for (const id of ["weather-entity", "weather-seconds"]) {
       get(id).addEventListener("change", () => this._rotationChanged());
       get(id).addEventListener("input", () => this._rotationChanged());
     }
@@ -406,6 +418,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
       weather.add(new Option(this._hass.states[id].attributes?.friendly_name || id, id));
     });
     const blocks = get("blocks");
+    for (const block of blocks.querySelectorAll("[data-block]")) this._rotationToggle(block);
     get("text-add").addEventListener("click", () => {
       const id = `text:${this._newTextId()}`;
       this._rotationTexts[id] = this._textDefaults();
@@ -462,9 +475,10 @@ class DivoomOrchestratorPanel extends HTMLElement {
       get("date-enabled").checked = config.date_events;
       get("error-seconds").value = config.error_seconds;
       const order = config.blocks || (config.date_events ? ["date"] : []);
+      const inactive = new Set(config.inactive_blocks || []);
       this._rotationTexts = Object.assign(Object.create(null), config.texts || {});
-      get("weather-enabled").checked = order.includes("weather");
-      get("date-enabled").checked = order.includes("date");
+      get("weather-enabled").checked = order.includes("weather") && !inactive.has("weather");
+      get("date-enabled").checked = order.includes("date") && !inactive.has("date");
       if (config.weather) {
         if (![...weather.options].some((option) => option.value === config.weather.entity)) {
           weather.add(new Option(`${config.weather.entity} (nicht verfügbar)`, config.weather.entity));
@@ -473,9 +487,15 @@ class DivoomOrchestratorPanel extends HTMLElement {
         get("weather-seconds").value = config.weather.seconds;
       }
       for (const name of order) {
-        const block = name.startsWith("text:") ? this._textBlock(name) :
+        const block = name.startsWith("text:") ? this._textBlock(name, !inactive.has(name)) :
           blocks.querySelector(`[data-block="${name}"]`);
         if (block) blocks.append(block);
+      }
+      for (const name of ["weather", "date"]) {
+        if (!order.includes(name)) blocks.append(blocks.querySelector(`[data-block="${name}"]`));
+        const block = blocks.querySelector(`[data-block="${name}"]`);
+        block.querySelector(".rotation-toggle span").textContent =
+          block.querySelector(".rotation-toggle input").checked ? "Aktiv" : "Inaktiv";
       }
       this._rotationLoadFiles(config.steps);
     }).catch((error) => this._rotationMessage(`Rotation konnte nicht geladen werden: ${error.message || String(error)}`, true));
@@ -527,7 +547,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
       background: [0, 0, 0], size: 10, time: 100, duration_mode: "seconds", duration: 10};
   }
 
-  _textBlock(id) {
+  _textBlock(id, enabled = true) {
     const block = document.createElement("li");
     block.className = "rotation-block";
     block.dataset.block = id;
@@ -542,12 +562,21 @@ class DivoomOrchestratorPanel extends HTMLElement {
     const subtitle = document.createElement("span");
     subtitle.textContent = "Textblock · verschiebbar";
     description.append(name, subtitle);
+    const toggle = document.createElement("label");
+    toggle.className = "rotation-toggle";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = enabled;
+    input.setAttribute("aria-label", `Textblock ${name.textContent} aktivieren`);
+    const state = document.createElement("span");
+    toggle.append(input, state);
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "secondary";
     edit.textContent = "Bearbeiten";
     edit.addEventListener("click", () => this._textEdit(id));
-    block.append(icon, description, edit);
+    block.append(icon, description, toggle, edit);
+    this._rotationToggle(block);
     this.shadowRoot.querySelector("#rotation-blocks").append(block);
     return block;
   }
@@ -569,7 +598,11 @@ class DivoomOrchestratorPanel extends HTMLElement {
         if (field === "name") {
           const block = [...this.shadowRoot.querySelectorAll("#rotation-blocks [data-block]")]
             .find((item) => item.dataset.block === this._editingText);
-          if (block) block.querySelector("strong").textContent = settings.name || "Text";
+          if (block) {
+            block.querySelector("strong").textContent = settings.name || "Text";
+            block.querySelector(".rotation-toggle input").setAttribute("aria-label",
+              `Textblock ${settings.name || "Text"} aktivieren`);
+          }
           this.shadowRoot.querySelector("#rotation-dialog-title").textContent =
             `Textblock bearbeiten: ${settings.name || "Text"}`;
         }
@@ -691,19 +724,19 @@ class DivoomOrchestratorPanel extends HTMLElement {
       return this._rotationMessage("Bitte mindestens ein GIF auswählen.", true);
     }
     if (!get("error-seconds").reportValidity()) return;
-    if (get("weather-enabled").checked &&
-        (!get("weather-entity").value || !get("weather-seconds").checkValidity())) {
+    if ((get("weather-enabled").checked && !get("weather-entity").value) ||
+        (get("weather-entity").value && !get("weather-seconds").checkValidity())) {
       this._rotationDialog("weather-settings", "Wetter bearbeiten");
       if (!get("weather-seconds").checkValidity()) get("weather-seconds").reportValidity();
       return this._rotationMessage("Bitte Wetter-Entität und Anzeigedauer wählen.", true);
     }
-    const blocks = [...get("blocks").querySelectorAll("[data-block]")]
-      .map((block) => block.dataset.block)
-      .filter((name) => name.startsWith("text:") ||
-        get(name === "date" ? "date-enabled" : "weather-enabled").checked);
+    const blockElements = [...get("blocks").querySelectorAll("[data-block]")];
+    const blocks = blockElements.map((block) => block.dataset.block);
+    const inactive_blocks = blockElements.filter((block) => !block.querySelector(".rotation-toggle input").checked)
+      .map((block) => block.dataset.block);
     const config = {
       folder: this._rotationFolder, steps, date_events: get("date-enabled").checked,
-      error_seconds: Number(get("error-seconds").value), blocks, texts: this._rotationTexts,
+      error_seconds: Number(get("error-seconds").value), blocks, inactive_blocks, texts: this._rotationTexts,
     };
     if (get("weather-entity").value) config.weather = {
       entity: get("weather-entity").value, seconds: Number(get("weather-seconds").value),

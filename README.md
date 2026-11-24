@@ -120,7 +120,10 @@ eigenen Dialogen bearbeitet. **Fertig** schließt den Dialog und behält die
 alle Änderungen dauerhaft. Die Startabfolge steht am Anfang
 jedes Durchlaufs; optional folgen ein Wetterblock, mehrere Textblöcke und alle
 aktiven Datums-Events alphabetisch. Ihre Reihenfolge lässt sich per Drag & Drop ändern und im
-Rotationseditor speichern. Änderungen werden beim nächsten Durchlauf übernommen. Bei
+Rotationseditor speichern. Wetter, Datums-Events und jeder Textblock können
+einzeln in der Übersicht aktiviert oder deaktiviert werden; Einstellungen und
+Reihenfolge bleiben dabei erhalten. Änderungen werden nach **Rotation speichern**
+beim nächsten Durchlauf übernommen. Bei
 gespeicherter Startabfolge und Gerätekennung startet die Rotation automatisch;
 ein manueller Stopp bleibt bis zum Neustart oder einem manuellen Start gültig.
 Die bisherige Ordner-Playlist und die Rotation verwenden denselben Controller

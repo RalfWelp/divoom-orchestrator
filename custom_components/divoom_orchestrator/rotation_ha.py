@@ -29,6 +29,7 @@ ROTATION = {
     vol.Required("date_events"): cv.boolean,
     vol.Required("error_seconds"): valid_value,
     vol.Optional("blocks"): [cv.string],
+    vol.Optional("inactive_blocks"): [cv.string],
     vol.Optional("texts", default={}): {cv.string: TEXT},
     vol.Optional("weather"): {
         vol.Required("entity"): vol.All(cv.string, vol.Length(min=1)),
@@ -64,6 +65,9 @@ class RotationRuntime:
         blocks = config.get("blocks", ["date"] if config["date_events"] else [])
         if len(set(blocks)) != len(blocks):
             raise ValueError("Each rotation block must have a unique ID")
+        inactive = config.get("inactive_blocks", [])
+        if len(set(inactive)) != len(inactive) or not set(inactive).issubset(blocks):
+            raise ValueError("Inactive blocks must be unique rotation blocks")
         for block in blocks:
             if block in ("weather", "date"):
                 continue
@@ -72,7 +76,7 @@ class RotationRuntime:
             validate_text(config["texts"][block])
         if set(config.get("texts", {})) != {block for block in blocks if block.startswith("text:")}:
             raise ValueError("Text configuration does not match rotation blocks")
-        if "weather" in blocks and not config.get("weather", {}).get("entity", "").startswith("weather."):
+        if "weather" in blocks and "weather" not in inactive and not config.get("weather", {}).get("entity", "").startswith("weather."):
             raise ValueError("Select a weather entity")
         events = self.hass.data[DOMAIN]["events"]
         async with self._lock:
@@ -121,7 +125,10 @@ class RotationRuntime:
         except (OSError, ValueError, vol.Invalid) as err:
             await self._report("start", str(err))
             sequence = await self._fallback("start", config["error_seconds"])
+        inactive = set(config.get("inactive_blocks", []))
         for block in config.get("blocks", ["date"] if config["date_events"] else []):
+            if block in inactive:
+                continue
             if block == "weather":
                 try:
                     sequence.append(await self._weather(config["weather"]))

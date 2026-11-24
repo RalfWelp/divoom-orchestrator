@@ -1,7 +1,7 @@
 {
   "domain": "divoom_orchestrator",
   "name": "Divoom Orchestrator",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "config_flow": true,
   "dependencies": ["divoom", "frontend", "panel_custom", "sun", "websocket_api"],
   "requirements": ["Pillow>=10.1.0"],

@@ -218,6 +218,45 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(rotation._cycle), 1)
         await rotation.stop()
 
+    async def test_rotation_inactive_blocks_preserve_order_and_settings(self):
+        data = self.hass.data["divoom_orchestrator"]
+        rotation = data["rotation"]
+        rotation.manual_stop = True
+        data["events"].events = {
+            "Silvester": {"kind": "date", "enabled": True, "folder": "rain",
+                          "steps": [{"file": "rain/one.gif", "mode": "seconds", "value": 2}],
+                          "schedule": {"mode": "annual", "start": "12-31", "end": "01-01"}},
+        }
+        text = self.text_settings(source="fixed", text="Hallo")
+        blocks = ["text:one", "weather", "date"]
+        config = {"folder": "rain", "steps": [
+            {"file": "rain/one.gif", "mode": "seconds", "value": 1},
+        ], "date_events": False, "error_seconds": 2, "blocks": blocks,
+            "inactive_blocks": blocks[:], "texts": {"text:one": text}}
+        await rotation.save(config, ["rain/one.gif"])
+        self.assertEqual(rotation.config["blocks"], blocks)
+        self.assertEqual(rotation.config["texts"]["text:one"], text)
+        await rotation._sequence()
+        self.assertEqual(list(rotation._cycle.values()), [("rain/one.gif", 1)])
+        self.assertFalse(any(call[0] == "persistent_notification" for call in self.hass.services.calls))
+        rotation.store.async_load = AsyncMock(return_value=rotation.config)
+        await rotation.load()
+        self.assertEqual(rotation.config["inactive_blocks"], blocks)
+        config["inactive_blocks"] = ["weather"]
+        config["date_events"] = True
+        await rotation.save(config, ["rain/one.gif"])
+        await rotation._sequence()
+        sequence = list(rotation._cycle.values())
+        self.assertEqual(sequence[1][0]["id"], "text:one")
+        self.assertEqual(sequence[2], ("rain/one.gif", 2))
+        config["inactive_blocks"] = ["date", "text:one"]
+        with self.assertRaisesRegex(ValueError, "weather entity"):
+            await rotation.save(config, ["rain/one.gif"])
+        for invalid in (["text:missing"], ["date", "date"]):
+            config["inactive_blocks"] = invalid
+            with self.assertRaisesRegex(ValueError, "Inactive blocks"):
+                await rotation.save(config, ["rain/one.gif"])
+
     async def test_rotation_transfer_retry_can_be_stopped(self):
         data = self.hass.data["divoom_orchestrator"]
         data["brightness"].config["device"] = "pixoo"
@@ -395,8 +434,10 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         config = {"folder": "rain", "steps": [
             {"file": "rain/one.gif", "mode": "seconds", "value": 1},
         ], "date_events": False, "error_seconds": 2, "blocks": ["text:one"],
+            "inactive_blocks": ["text:one"],
             "texts": {"text:one": self.text_settings(source="fixed", text="Hallo")}}
         parsed = actual_rotation.SCHEMA(config)
+        self.assertEqual(parsed["inactive_blocks"], ["text:one"])
         self.assertEqual(parsed["texts"]["text:one"]["foreground"], [255, 0, 0])
         config["texts"]["text:one"]["foreground"] = [256, 1, 2]
         with self.assertRaises(real_vol.Invalid):
