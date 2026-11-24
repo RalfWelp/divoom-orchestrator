@@ -153,7 +153,7 @@ class RotationRuntime:
     async def _weather(self, settings: dict) -> tuple[str, float]:
         state = self.hass.states.get(settings["entity"])
         sun = self.hass.states.get("sun.sun")
-        if state is None or not re.fullmatch(r"[a-z0-9_]+", state.state) or state.state in ("unknown", "unavailable"):
+        if state is None or not re.fullmatch(r"[a-z0-9_-]+", state.state) or state.state in ("unknown", "unavailable"):
             raise ValueError(f"Weather unavailable or invalid: {settings['entity']}")
         if sun is None or sun.state not in ("above_horizon", "below_horizon"):
             raise ValueError("Sun state unavailable")

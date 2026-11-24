@@ -128,7 +128,9 @@ und können nicht gleichzeitig laufen.
 
 Für das Wetter eine HA-Wetterentität wählen und GIFs unter
 `wetter/<Wetterzustand>/tag` beziehungsweise `wetter/<Wetterzustand>/nacht`
-ablegen. Der Zustand von `sun.sun` bestimmt Tag oder Nacht. Pro Durchlauf wird
+ablegen, z. B. `wetter/lightning-rainy/nacht`. Die Ordnernamen entsprechen
+den HA-Zuständen einschließlich Bindestrichen. Der Zustand von `sun.sun`
+bestimmt Tag oder Nacht. Pro Durchlauf wird
 zufällig ein GIF gewählt; bei mehreren Dateien wird die direkte Wiederholung
 vermieden. Neue Dateien werden automatisch berücksichtigt.
 

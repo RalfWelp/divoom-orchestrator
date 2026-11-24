@@ -258,6 +258,34 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         await rotation._sequence()
         self.assertNotEqual(cycle[1], list(rotation._cycle.values())[1])
 
+    async def test_weather_conditions_support_both_phases_and_reject_invalid_names(self):
+        rotation = self.hass.data["divoom_orchestrator"]["rotation"]
+        conditions = (
+            "clear-night", "cloudy", "exceptional", "fog", "hail", "lightning",
+            "lightning-rainy", "partlycloudy", "pouring", "rainy", "snowy",
+            "snowy-rainy", "sunny", "windy", "windy-variant",
+        )
+        states = {
+            "weather.home": types.SimpleNamespace(state=""),
+            "sun.sun": types.SimpleNamespace(state=""),
+        }
+        self.hass.states.get = states.get
+        for condition in conditions:
+            for sun_state, phase in (("above_horizon", "tag"), ("below_horizon", "nacht")):
+                with self.subTest(condition=condition, phase=phase):
+                    folder = self.root / "pixelart" / "wetter" / condition / phase
+                    folder.mkdir(parents=True)
+                    (folder / "test.gif").write_bytes(b"test")
+                    states["weather.home"].state = condition
+                    states["sun.sun"].state = sun_state
+                    result = await rotation._weather({"entity": "weather.home", "seconds": 4})
+                    self.assertEqual(result, (f"wetter/{condition}/{phase}/test.gif", 4))
+        for condition in ("unknown", "unavailable", "../sunny", "cloudy/nacht", ""):
+            with self.subTest(invalid=condition):
+                states["weather.home"].state = condition
+                with self.assertRaisesRegex(ValueError, "Weather unavailable or invalid"):
+                    await rotation._weather({"entity": "weather.home", "seconds": 4})
+
     async def test_trigger_subscriptions_require_transition_and_are_replaced(self):
         store = self.hass.data["divoom_orchestrator"]["events"]
         store.play_event = AsyncMock()
