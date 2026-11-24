@@ -22,6 +22,7 @@ from .text_ha import TEXT, duration as text_duration, validate_text
 
 DOMAIN = "divoom_orchestrator"
 _LOGGER = logging.getLogger(__name__)
+TEXT_END_PADDING = " " * 8
 ROTATION = {
     vol.Required("folder"): vol.All(cv.string, vol.Length(min=1)),
     vol.Required("steps"): [STEP],
@@ -190,6 +191,7 @@ class RotationRuntime:
                     try:
                         settings = item["settings"]
                         text, selection = await data["texts"].select(block_id, settings)
+                        text += TEXT_END_PADDING
                         seconds = await self.hass.async_add_executor_job(text_duration, settings, text)
                         self._cycle[token] = (item, seconds)
                         payload = {"device": device, "text": text, "size": settings["size"],

@@ -149,7 +149,9 @@ anhand der Standardschrift und Frame-Schrittweite von `hass-divoom` für den
 `hass-divoom` 1.5.2 am Pixoo geprüft. Andere Geräte, spätere Änderungen an
 `hass-divoom` und Übertragungsverzögerungen können das Ergebnis beeinflussen;
 eine Rückmeldung über das tatsächliche Durchlaufende gibt es nicht. Das Senden
-erfolgt über `divoom.text`.
+erfolgt über `divoom.text`. Acht angehängte Leerzeichen sorgen beim Pixoo
+dafür, dass das Ende längerer Texte sichtbar bleibt; sie werden bei der
+Durchlauf-Schätzung berücksichtigt und nicht in der Textquelle gespeichert.
 
 Fehler bei der Auswahl der Start-, Wetter-, Text-, Datums- oder Triggerbilder werden als dauerhafte
 Benachrichtigung gemeldet und durch `fehler/start.gif` beziehungsweise

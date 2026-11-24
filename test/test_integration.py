@@ -470,10 +470,35 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             if any(call[1] == "text" for call in self.hass.services.calls):
                 break
         calls = [call for call in self.hass.services.calls if call[:2] == ("divoom", "text")]
-        self.assertEqual(calls[0][2]["text"], "Erster")
+        self.assertEqual(calls[0][2]["text"], "Erster        ")
         self.assertEqual(calls[0][2]["foreground_color"], [255, 0, 0])
         self.assertEqual(data["texts"].progress["text:one"]["index"], 0)
         await data["rotation"].stop()
+
+    async def test_text_loop_duration_uses_padded_sent_text(self):
+        data = self.hass.data["divoom_orchestrator"]
+        data["brightness"].config["device"] = "pixoo"
+        rotation_module = sys.modules["test_divoom_orchestrator.rotation_ha"]
+        settings = self.text_settings(source="fixed", text="TEST", size=10,
+                                      duration_mode="loops", duration=1)
+        config = {"folder": "rain", "steps": [
+            {"file": "rain/one.gif", "mode": "seconds", "value": 0.01},
+        ], "date_events": False, "error_seconds": 0.01,
+            "blocks": ["text:one"], "texts": {"text:one": settings}}
+        with patch.object(rotation_module, "text_duration", wraps=rotation_module.text_duration) as calculate:
+            await data["rotation"].save(config, ["rain/one.gif"])
+            for _ in range(50):
+                await asyncio.sleep(0.01)
+                if any(call[1] == "text" for call in self.hass.services.calls):
+                    break
+            calls = [call for call in self.hass.services.calls if call[:2] == ("divoom", "text")]
+            self.assertTrue(calls)
+            sent_text = calls[0][2]["text"]
+            self.assertEqual(sent_text, "TEST        ")
+            self.assertEqual(calculate.call_args.args[1], sent_text)
+            self.assertNotEqual(rotation_module.text_duration(settings, sent_text),
+                                rotation_module.text_duration(settings, "TEST"))
+            await data["rotation"].stop()
 
     async def test_text_error_fallback_and_invalid_loop_config(self):
         data = self.hass.data["divoom_orchestrator"]
