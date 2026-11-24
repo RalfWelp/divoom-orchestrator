@@ -190,14 +190,14 @@ class RotationRuntime:
                     try:
                         settings = item["settings"]
                         text, selection = await data["texts"].select(block_id, settings)
-                        seconds = text_duration(settings, text)
+                        seconds = await self.hass.async_add_executor_job(text_duration, settings, text)
                         self._cycle[token] = (item, seconds)
                         payload = {"device": device, "text": text, "size": settings["size"],
                                    "time": settings["time"], "foreground_color": settings["foreground"],
                                    "background_color": settings["background"]}
                         action = "text"
                         self._reported.discard("text")
-                    except (KeyError, ValueError, vol.Invalid) as err:
+                    except (KeyError, OSError, ValueError, vol.Invalid) as err:
                         await self._report("text", f"{block_id}: {err}")
                         fallback = await self._fallback("text", item["error_seconds"])
                         if not fallback:

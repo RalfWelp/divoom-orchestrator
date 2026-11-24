@@ -36,6 +36,14 @@ class DivoomOrchestratorPanel extends HTMLElement {
         label { display:block; margin-top:17px; font-size:14px; font-weight:600; }
         input,select { width:100%; margin-top:7px; padding:11px; border:1px solid var(--panel-divider); border-radius:8px; background:var(--panel-card); color:var(--panel-text); font:inherit; }
         input[type=checkbox] { width:auto; margin-right:8px; }
+        input[type=radio] { width:auto; margin:0 8px 0 0; }
+        input[type=color] { height:44px; padding:4px; cursor:pointer; }
+        input[type=color]::-webkit-color-swatch { border:1px solid var(--panel-divider); border-radius:4px; }
+        input[type=color]::-moz-color-swatch { border:1px solid var(--panel-divider); border-radius:4px; }
+        fieldset.text-speed { border:0; margin:17px 0 0; padding:0; min-width:0; }
+        .text-speed legend { font-size:14px; font-weight:600; }
+        .text-speed-options { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:10px; }
+        .text-speed-options label { display:flex; align-items:center; margin:0; font-weight:normal; }
         button { border:0; border-radius:8px; padding:11px 16px; font:inherit; font-weight:600; cursor:pointer; }
         button:disabled { opacity:.5; cursor:wait; }
         .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
@@ -200,11 +208,20 @@ class DivoomOrchestratorPanel extends HTMLElement {
                 </div>
                 <label>Textfarbe<input id="text-foreground" type="color" value="#ffffff"></label>
                 <label>Hintergrundfarbe<input id="text-background" type="color" value="#000000"></label>
-                <label>Schriftgröße<input id="text-size" type="number" min="1" max="64" step="1" value="8"></label>
-                <label>Framezeit / Geschwindigkeit (ms)<input id="text-time" type="number" min="1" max="65535" step="1" value="100"></label>
+                <label>Schriftgröße<input id="text-size" type="number" min="1" max="64" step="1" value="10"></label>
+                <fieldset class="text-speed"><legend>Geschwindigkeit</legend>
+                  <div class="text-speed-options" id="text-speed">
+                    <label><input type="radio" name="text-speed" value="1">Sehr schnell</label>
+                    <label><input type="radio" name="text-speed" value="50">Schnell</label>
+                    <label><input type="radio" name="text-speed" value="100">Mittel</label>
+                    <label><input type="radio" name="text-speed" value="150">Langsam</label>
+                    <label><input type="radio" name="text-speed" value="200">Sehr langsam</label>
+                    <label id="text-speed-custom-label" hidden><input type="radio" name="text-speed" id="text-speed-custom"><span id="text-speed-custom-value"></span></label>
+                  </div>
+                </fieldset>
                 <label>Anzeigemodus<select id="text-duration-mode"><option value="seconds">Sekunden</option><option value="loops">Durchläufe (grob geschätzt)</option></select></label>
-                <label>Dauer / Durchläufe<input id="text-duration" type="number" min="0.01" max="3600" step="any" value="10"></label>
-                <p class="muted">Durchläufe sind nur grob geschätzt und nicht mit dem Display synchronisiert.</p>
+                <label><span id="text-duration-label">Dauer (Sekunden)</span><input id="text-duration" type="number" min="0.01" max="3600" step="any" value="10"></label>
+                <p class="muted">Durchläufe werden für den 16×16-Pixoo anhand der Textbreite geschätzt und sind nicht mit dem Display synchronisiert.</p>
                 <div class="actions"><button type="button" class="secondary" id="text-remove">Textblock entfernen</button></div>
               </div>
               <p id="rotation-dialog-message" class="message" role="status" aria-live="polite"></p>
@@ -507,7 +524,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
   _textDefaults() {
     return {name: "Text", source: "fixed", text: "", entity: "", attribute: "",
       lines: [], list_version: "", selection: "daily_order", foreground: [255, 255, 255],
-      background: [0, 0, 0], size: 8, time: 100, duration_mode: "seconds", duration: 10};
+      background: [0, 0, 0], size: 10, time: 100, duration_mode: "seconds", duration: 10};
   }
 
   _textBlock(id) {
@@ -539,7 +556,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     const get = (name) => this.shadowRoot.querySelector(`#text-${name}`);
     const fields = {
       name: "name", source: "source", fixed: "text", entity: "entity", attribute: "attribute",
-      selection: "selection", size: "size", time: "time", "duration-mode": "duration_mode",
+      selection: "selection", size: "size", "duration-mode": "duration_mode",
       duration: "duration",
     };
     for (const [field, key] of Object.entries(fields)) {
@@ -557,10 +574,17 @@ class DivoomOrchestratorPanel extends HTMLElement {
             `Textblock bearbeiten: ${settings.name || "Text"}`;
         }
         if (field === "source") this._textSource();
+        if (field === "duration-mode") this._textDurationLabel();
       };
       input.addEventListener("input", update);
       input.addEventListener("change", update);
     }
+    get("speed").addEventListener("change", (event) => {
+      const settings = this._rotationTexts[this._editingText];
+      if (!settings || event.target.name !== "text-speed" || !event.target.checked) return;
+      settings.time = Number(event.target.value);
+      this._rotationChanged();
+    });
     for (const name of ["foreground", "background"]) {
       get(name).addEventListener("input", () => {
         const settings = this._rotationTexts[this._editingText];
@@ -612,20 +636,36 @@ class DivoomOrchestratorPanel extends HTMLElement {
     }
   }
 
+  _textDurationLabel() {
+    const root = this.shadowRoot;
+    root.querySelector("#text-duration-label").textContent =
+      root.querySelector("#text-duration-mode").value === "seconds" ? "Dauer (Sekunden)" : "Anzahl Durchläufe";
+  }
+
   _textEdit(id) {
     const settings = this._rotationTexts[id];
     if (!settings) return;
     this._editingText = id;
     this._rotationDialog("text-editor", `Textblock bearbeiten: ${settings.name || "Text"}`);
     const fields = {name: "name", source: "source", fixed: "text", entity: "entity",
-      attribute: "attribute", selection: "selection", size: "size", time: "time",
+      attribute: "attribute", selection: "selection", size: "size",
       "duration-mode": "duration_mode", duration: "duration"};
     for (const [field, key] of Object.entries(fields)) this.shadowRoot.querySelector(`#text-${field}`).value = settings[key];
+    const speeds = this.shadowRoot.querySelectorAll('#text-speed input[type="radio"]');
+    const preset = [...speeds].find((input) => input.id !== "text-speed-custom" && Number(input.value) === settings.time);
+    const custom = this.shadowRoot.querySelector("#text-speed-custom");
+    this.shadowRoot.querySelector("#text-speed-custom-label").hidden = Boolean(preset);
+    if (!preset) {
+      custom.value = settings.time;
+      this.shadowRoot.querySelector("#text-speed-custom-value").textContent = `Bisheriger Wert (${settings.time} ms)`;
+    }
+    (preset || custom).checked = true;
     for (const name of ["foreground", "background"]) {
       this.shadowRoot.querySelector(`#text-${name}`).value = `#${settings[name].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
     }
     this.shadowRoot.querySelector("#text-list-status").textContent = `${settings.lines.length} Zeilen im Textblock.`;
     this._textSource();
+    this._textDurationLabel();
     this.shadowRoot.querySelector("#text-name").focus();
   }
 

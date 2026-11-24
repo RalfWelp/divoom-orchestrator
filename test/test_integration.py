@@ -308,6 +308,32 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         settings.update(overrides)
         return settings
 
+    async def test_text_loop_duration_matches_pixoo_measurements(self):
+        text_module = sys.modules["test_divoom_orchestrator.text_ha"]
+        settings = self.text_settings(size=10, time=100, duration_mode="loops", duration=1)
+        for text, expected in (("TEST", 4.9), ("TESTTESTTEST", 5.1), ("Tiiiiiiiiiii", 6.3)):
+            with self.subTest(text=text):
+                self.assertAlmostEqual(text_module.duration(settings, text), expected)
+        settings["time"] = 200
+        self.assertAlmostEqual(text_module.duration(settings, "TESTTESTTEST"), 9.7)
+        settings["duration"] = 2
+        self.assertAlmostEqual(text_module.duration(settings, "TESTTESTTEST"), 18.9)
+        settings["duration_mode"] = "seconds"
+        settings["duration"] = 3
+        self.assertEqual(text_module.duration(settings, "TEST"), 3)
+
+    async def test_text_loop_duration_checks_limit_and_long_text(self):
+        text_module = sys.modules["test_divoom_orchestrator.text_ha"]
+        settings = self.text_settings(size=10, time=100, duration_mode="loops", duration=1)
+        with patch.object(text_module.ImageFont, "load_default") as font:
+            with patch.object(text_module.ImageDraw.ImageDraw, "textbbox", return_value=(0, 0, 221, 10)):
+                self.assertAlmostEqual(text_module.duration(settings, "long"), 6.5)
+            font.assert_called_once_with(10)
+        settings["time"] = 65535
+        settings["duration"] = 3600
+        with self.assertRaisesRegex(ValueError, "exceeds one hour"):
+            text_module.duration(settings, "TEST")
+
     async def test_text_selection_persists_daily_and_reupload_resets(self):
         texts = self.hass.data["divoom_orchestrator"]["texts"]
         settings = self.text_settings(selection="daily_order")

@@ -7,6 +7,7 @@ import math
 import random
 
 import voluptuous as vol
+from PIL import Image, ImageDraw, ImageFont
 
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
@@ -126,11 +127,23 @@ class TextRuntime:
 
 
 def duration(settings: dict, text: str) -> float:
-    """Approximate scrolling duration; device encoding may change frame count."""
+    """Estimate Pixoo text cycles using hass-divoom's default font and frame steps."""
     if settings["duration_mode"] == "seconds":
         return settings["duration"]
-    frames = 16 + len(text) * settings["size"] * 0.6
-    seconds = frames * settings["time"] / 1000 * settings["duration"]
+    size = settings["size"]
+    font = ImageFont.load_default(size)
+    with Image.new("RGBA", (1600, 16)) as image:
+        width = ImageDraw.Draw(image).textbbox((0, 0), text, font=font)[2]
+    span = 16 + width + int((16 - size) / 2)
+    step = 1
+    if span > 60:
+        step = 2
+        if span // step > 60:
+            step = 4
+    frames = span // step
+    if frames < 1:
+        raise ValueError("Text produces no scrolling frames")
+    seconds = frames * settings["time"] / 1000 * settings["duration"] + 0.5
     if not math.isfinite(seconds) or seconds > 3600:
         raise ValueError("Estimated text duration exceeds one hour")
-    return max(0.01, seconds)
+    return seconds

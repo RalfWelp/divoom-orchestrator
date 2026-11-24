@@ -140,10 +140,16 @@ Fortschritt bleiben nach Neustarts erhalten; ein erneuter Upload setzt sie
 zurück. Leere beziehungsweise `unknown`/`unavailable` Werte und komplexe
 Attribute gelten als Fehler. Der Tageswechsel folgt der HA-Zeitzone.
 Textfarbe, Hintergrundfarbe, Größe, Framezeit und Anzeigedauer sind
-einstellbar. Die Anzahl der Textdurchläufe ist eine **grobe Schätzung**, da
-Schriftbreite, Framebegrenzung und Hardware das Ergebnis beeinflussen können.
-Das Senden erfolgt über `divoom.text`; die verwendete Standardschrift bestimmt
-die Divoom-Integration.
+einstellbar. Neue Textblöcke verwenden standardmäßig Schriftgröße 10;
+vorhandene Größen bleiben unverändert. Für die Textgeschwindigkeit stehen fünf
+Stufen zur Auswahl; abweichende bisherige Framezeiten bleiben erhalten, bis
+eine Stufe gewählt wird. Für Textdurchläufe schätzt der Orchestrator die Dauer
+anhand der Standardschrift und Frame-Schrittweite von `hass-divoom` für den
+16×16-Pixoo und ergänzt einen Puffer von 0,5 Sekunden. Die Messung wurde mit
+`hass-divoom` 1.5.2 am Pixoo geprüft. Andere Geräte, spätere Änderungen an
+`hass-divoom` und Übertragungsverzögerungen können das Ergebnis beeinflussen;
+eine Rückmeldung über das tatsächliche Durchlaufende gibt es nicht. Das Senden
+erfolgt über `divoom.text`.
 
 Fehler bei der Auswahl der Start-, Wetter-, Text-, Datums- oder Triggerbilder werden als dauerhafte
 Benachrichtigung gemeldet und durch `fehler/start.gif` beziehungsweise
