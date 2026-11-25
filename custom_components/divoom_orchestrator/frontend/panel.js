@@ -417,6 +417,21 @@ class DivoomOrchestratorPanel extends HTMLElement {
     let currentSort = 1;
     let folderReady = false;
     let folderRevision = 0;
+    let activePreviews = 0;
+    const previewWaiters = [];
+    const acquirePreview = () => new Promise((resolve) => {
+      if (activePreviews < 4) {
+        activePreviews++;
+        resolve();
+      } else {
+        previewWaiters.push(resolve);
+      }
+    });
+    const releasePreview = () => {
+      const next = previewWaiters.shift();
+      if (next) next();
+      else activePreviews--;
+    };
     const report = (text, error = false) => {
       message.textContent = text;
       message.classList.toggle("error", error);
@@ -477,7 +492,10 @@ class DivoomOrchestratorPanel extends HTMLElement {
           save.className = "primary";
           save.textContent = "Als GIF speichern";
           save.disabled = true;
-          card.append(image, title, author, status, save);
+          const importStatus = document.createElement("small");
+          importStatus.setAttribute("role", "status");
+          importStatus.setAttribute("aria-live", "polite");
+          card.append(image, title, author, status, save, importStatus);
           results.append(card);
           if (!work.importable) {
             status.textContent = "Durch Rechtekennzeichnung nicht verfügbar.";
@@ -485,24 +503,34 @@ class DivoomOrchestratorPanel extends HTMLElement {
           }
           status.textContent = "Vorschau wird geladen …";
           save.addEventListener("click", async () => {
-            if (!folderReady) return report("Bitte zuerst einen Zielordner laden.", true);
+            if (!folderReady) {
+              importStatus.classList.add("error");
+              importStatus.textContent = "Bitte zuerst einen Zielordner laden.";
+              return;
+            }
             save.disabled = true;
+            save.textContent = "Wird gespeichert …";
+            importStatus.classList.remove("error");
+            importStatus.textContent = "GIF wird gespeichert …";
             try {
               const saved = await this._hass.callWS({
                 type: "divoom_orchestrator/community_import", search_id: search.search_id, gallery_id: work.id, folder: folder.value,
               });
-              report(`Gespeichert: ${saved.file}`);
+              importStatus.textContent = `Gespeichert: ${saved.file}`;
             } catch (error) {
-              report(`Import fehlgeschlagen: ${error.message || String(error)}`, true);
+              importStatus.classList.add("error");
+              importStatus.textContent = `Import fehlgeschlagen: ${error.message || String(error)}`;
             } finally {
               save.disabled = false;
+              save.textContent = "Als GIF speichern";
             }
           });
           previews.push({work, image, status, save});
         }
-        for (const item of previews) {
-          if (requestRevision !== revision) return;
+        await Promise.all(previews.map(async (item) => {
+          await acquirePreview();
           try {
+            if (requestRevision !== revision) return;
             const preview = await this._hass.callWS({
               type: "divoom_orchestrator/community_preview", search_id: search.search_id, gallery_id: item.work.id,
             });
@@ -511,10 +539,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
             item.status.textContent = "";
             item.save.disabled = false;
           } catch (error) {
+            if (requestRevision !== revision) return;
             item.status.textContent = `Vorschau nicht verfügbar: ${error.message || String(error)}`;
             item.status.classList.add("error");
+          } finally {
+            releasePreview();
           }
-        }
+        }));
         if (requestRevision === revision && works.length) report(`${works.length} Ergebnisse auf Seite ${page}.`);
       } catch (error) {
         if (requestRevision === revision) report(`Suche fehlgeschlagen: ${error.message || String(error)}`, true);

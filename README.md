@@ -74,12 +74,14 @@ als animierte Vorschau betrachten. Der Suchbegriff wird an Divoom übermittelt.
 Im Zielordnerbrowser einen vorhandenen Ordner unter `/config/pixelart` wählen
 und ein einzelnes Werk als GIF speichern. Dafür benötigt Home Assistant
 Schreibzugriff; bestehende `divoom-<ID>.gif`-Dateien werden nicht überschrieben.
+Der Speicherstatus steht direkt unter der Schaltfläche des jeweiligen Werks.
 Titel und Urheber erscheinen in der Ergebnisliste. Bitte die Rechte der
 Urheber und Divooms Nutzungsbedingungen beachten. Privat, verborgen oder
 als urheberrechtlich eingeschränkt gekennzeichnete Werke werden nicht importiert.
 
 Die Divoom-Cloud-Schnittstelle ist inoffiziell, kann sich ändern und begrenzt
-Anfragen und anonyme Ergebnisse. Nicht alle Formate lassen sich über die
+Anfragen und anonyme Ergebnisse. Pro Panel werden höchstens vier Vorschauen
+gleichzeitig abgerufen. Nicht alle Formate lassen sich über die
 Schnittstelle als 16×16-GIF abrufen; betroffene Vorschauen melden einen Fehler.
 Ein Abruf kann nach Erreichen des Anfragelimits vorübergehend fehlschlagen.
 GIF speichert Framezeiten in 10-ms-Schritten; die Wiedergabe kann daher leicht
