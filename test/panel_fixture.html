@@ -11,7 +11,10 @@
     const events = {};
     panel.hass = {
       themes: {darkMode: true},
-      states: {"weather.home": {entity_id: "weather.home", state: "sunny", attributes: {friendly_name: "Testwetter"}}},
+      states: {
+        "weather.home": {entity_id: "weather.home", state: "sunny", attributes: {friendly_name: "Testwetter"}},
+        "calendar.holidays": {entity_id: "calendar.holidays", state: "off", attributes: {friendly_name: "Feiertage"}},
+      },
       callWS: async (request) => {
         document.querySelector("#calls").textContent = JSON.stringify(request);
         if (request.type === "divoom_orchestrator/playlist_files") {
@@ -27,6 +30,7 @@
           return [];
         }
         if (request.type === "divoom_orchestrator/events") return events;
+        if (request.type === "divoom_orchestrator/holiday_names") return ["Ostersonntag", "Weihnachten"];
         if (request.type === "divoom_orchestrator/rotation") return null;
         if (request.type === "divoom_orchestrator/rotation_save") return;
         if (request.type === "divoom_orchestrator/rotation_start") return;

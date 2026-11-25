@@ -2,10 +2,12 @@
 
 import asyncio
 from copy import deepcopy
+from datetime import date, datetime, time, timedelta
 import logging
 import math
 from pathlib import Path
 import re
+from time import monotonic
 
 import voluptuous as vol
 
@@ -15,6 +17,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util import dt as dt_util
 
 from .gif_preview import gif_preview
 from .playlist import scan_gifs
@@ -31,6 +34,13 @@ def valid_value(value):
     return value
 
 
+def valid_cooldown(value):
+    value = vol.Coerce(float)(value)
+    if not math.isfinite(value) or value <= 0:
+        raise vol.Invalid("Cooldown must be a positive finite number of seconds")
+    return value
+
+
 STEP = {
     vol.Required("file"): cv.string,
     vol.Required("mode"): vol.In(["seconds", "loops"]),
@@ -40,10 +50,15 @@ EVENT = {
     vol.Optional("kind", default="trigger"): vol.In(["trigger", "date"]),
     vol.Optional("enabled", default=True): cv.boolean,
     vol.Optional("priority", default=3): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+    vol.Optional("cooldown_seconds"): valid_cooldown,
     vol.Optional("schedule"): {
-        vol.Required("mode"): vol.In(["annual", "once"]),
-        vol.Required("start"): cv.string,
-        vol.Required("end"): cv.string,
+        vol.Required("mode"): vol.In(["annual", "once", "weekly", "dates_once", "dates_annual", "holiday"]),
+        vol.Optional("start"): cv.string,
+        vol.Optional("end"): cv.string,
+        vol.Optional("weekdays"): [int],
+        vol.Optional("dates"): [cv.string],
+        vol.Optional("calendar"): cv.string,
+        vol.Optional("holidays"): [cv.string],
     },
     vol.Optional("trigger"): {
         vol.Required("type"): vol.In(["manual", "state", "event"]),
@@ -56,6 +71,10 @@ EVENT = {
     vol.Required("steps"): [STEP],
 }
 EVENT_SCHEMA = vol.Schema(EVENT)
+
+
+class CooldownActive(ValueError):
+    """A trigger was requested before its cooldown expired."""
 
 
 def folders(root: Path, folder: str) -> list[str]:
@@ -85,6 +104,7 @@ class EventStore:
         self._lock = asyncio.Lock()
         self._subscriptions = []
         self._trigger_tasks: set[asyncio.Task] = set()
+        self._started_at: dict[str, float] = {}
 
     @property
     def root(self) -> Path:
@@ -153,7 +173,55 @@ class EventStore:
             del updated[name]
             await self.store.async_save(updated)
             self.events = updated
+            self._started_at.pop(name, None)
             self.listen()
+
+    async def calendar_holidays(self, entity: str, days: int) -> set[str]:
+        """Return individual event titles, including merged Holiday titles."""
+        if not re.fullmatch(r"calendar\.[a-z0-9_]+", entity):
+            raise ValueError("Select a calendar entity")
+        state = self.hass.states.get(entity)
+        if state is None or state.state in ("unknown", "unavailable"):
+            raise ValueError(f"Calendar unavailable: {entity}")
+        now = dt_util.now()
+        start = datetime.combine(now.date(), time.min, tzinfo=now.tzinfo)
+        end = datetime.combine(now.date() + timedelta(days=days), time.min, tzinfo=now.tzinfo)
+        names = set()
+        cursor = start
+        while cursor < end:
+            segment_end = min(end, datetime.combine(
+                cursor.date() + timedelta(days=365), time.min, tzinfo=now.tzinfo
+            ))
+            response = await self.hass.services.async_call(
+                "calendar", "get_events",
+                {"entity_id": entity, "start_date_time": cursor.isoformat(),
+                 "end_date_time": segment_end.isoformat()},
+                blocking=True, return_response=True,
+            )
+            if not isinstance(response, dict) or not isinstance(response.get(entity), dict):
+                raise ValueError(f"Calendar returned no event data: {entity}")
+            records = response[entity].get("events")
+            if not isinstance(records, list):
+                raise ValueError(f"Calendar returned invalid event data: {entity}")
+            for record in records:
+                if (not isinstance(record, dict) or not isinstance(record.get("summary"), str)
+                        or not isinstance(record.get("start"), str)):
+                    raise ValueError(f"Calendar returned an event without a title or start: {entity}")
+                try:
+                    raw_start = record["start"]
+                    if len(raw_start) == 10:
+                        event_date = date.fromisoformat(raw_start)
+                    else:
+                        timestamp = datetime.fromisoformat(raw_start)
+                        if timestamp.tzinfo is None:
+                            timestamp = timestamp.replace(tzinfo=now.tzinfo)
+                        event_date = timestamp.astimezone(now.tzinfo).date()
+                except ValueError as err:
+                    raise ValueError(f"Calendar returned an invalid event start: {entity}") from err
+                if cursor.date() <= event_date < segment_end.date():
+                    names.update(name.strip() for name in record["summary"].split(";") if name.strip())
+            cursor = segment_end
+        return names
 
     def listen(self) -> None:
         """Replace listeners without firing events for existing entity states."""
@@ -187,6 +255,8 @@ class EventStore:
     async def _run_trigger(self, name: str) -> None:
         try:
             await self.play_event(name, automatic=True)
+        except CooldownActive as err:
+            _LOGGER.debug("Ignoring trigger %s: %s", name, err)
         except (OSError, ValueError, vol.Invalid, HomeAssistantError) as err:
             if isinstance(err, ValueError) and str(err) == "An event is already running with equal or higher priority":
                 _LOGGER.debug("Ignoring trigger %s: %s", name, err)
@@ -204,7 +274,7 @@ class EventStore:
         if self._trigger_tasks:
             await asyncio.gather(*self._trigger_tasks)
 
-    async def play_event(self, name: str, *, automatic: bool = False) -> None:
+    async def play_event(self, name: str, *, automatic: bool = False, test: bool = False) -> None:
         """Play a saved snapshot, shared by automatic and manual triggers."""
         event = deepcopy(self.events.get(name))
         if event is None:
@@ -221,6 +291,16 @@ class EventStore:
         if brightness is None or not brightness.config["device"].strip():
             raise HomeAssistantError("Configure a Divoom device in settings first")
         is_trigger = event.get("kind", "trigger") == "trigger"
+        cooldown = event.get("cooldown_seconds") if is_trigger and not test else None
+
+        def check_cooldown() -> None:
+            last_started = self._started_at.get(name)
+            if cooldown is not None and last_started is not None:
+                remaining = cooldown - (monotonic() - last_started)
+                if remaining > 0:
+                    raise CooldownActive(f"Cooldown active for {name}: {remaining:.1f} seconds remaining")
+
+        check_cooldown()
         if is_trigger and not brightness.config["enabled"]:
             raise HomeAssistantError("Enable brightness automation before testing a triggered event")
         device = brightness.config["device"].strip()
@@ -237,6 +317,8 @@ class EventStore:
                 raise ValueError(f"Cannot play event or its error image: {err}") from err
 
         async def event_started():
+            if cooldown is not None:
+                self._started_at[name] = monotonic()
             brightness.controller.event_started()
             await brightness.controller.refresh()
 
@@ -262,6 +344,7 @@ class EventStore:
                     if await controller.wait_for_interrupt(30):
                         return
 
+        check_cooldown()
         await controller.start_event(
             steps, show, device, priority=event.get("priority", 3), name=name,
             on_start=event_started if is_trigger else None,
@@ -318,6 +401,20 @@ async def websocket_events(hass, connection, msg):
 
 @websocket_api.require_admin
 @websocket_api.websocket_command({
+    vol.Required("type"): "divoom_orchestrator/holiday_names",
+    vol.Required("calendar"): str,
+})
+@websocket_api.async_response
+async def websocket_holiday_names(hass, connection, msg):
+    try:
+        names = await runtime(hass).calendar_holidays(msg["calendar"], 730)
+        connection.send_result(msg["id"], sorted(names, key=str.casefold))
+    except (ValueError, HomeAssistantError) as err:
+        connection.send_error(msg["id"], "calendar_error", str(err))
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
     vol.Required("type"): "divoom_orchestrator/event_save",
     vol.Required("name"): str,
     vol.Required("event"): EVENT,
@@ -354,13 +451,13 @@ async def websocket_delete(hass, connection, msg):
 @websocket_api.async_response
 async def websocket_test(hass, connection, msg):
     try:
-        await runtime(hass).play_event(msg["name"])
+        await runtime(hass).play_event(msg["name"], test=True)
         connection.send_result(msg["id"])
     except (OSError, ValueError, vol.Invalid, HomeAssistantError) as err:
         connection.send_error(msg["id"], "event_failed", str(err))
 
 
 def register(hass: HomeAssistant) -> None:
-    for command in (websocket_folders, websocket_events, websocket_save,
+    for command in (websocket_folders, websocket_events, websocket_holiday_names, websocket_save,
                     websocket_delete, websocket_test):
         websocket_api.async_register_command(hass, command)

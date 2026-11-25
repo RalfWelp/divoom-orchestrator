@@ -27,12 +27,16 @@ class DivoomOrchestratorPanel extends HTMLElement {
         header button { font-size:22px; background:none; padding:2px 6px; color:inherit; }
         h1 { margin:0; font-size:21px; font-weight:500; }
         main { max-width:1100px; margin:auto; padding:28px 20px; }
-        .hero { border-radius:18px; padding:26px; background:linear-gradient(115deg,#145c70,#278b84); color:#fff; margin-bottom:22px; }
+        .hero { border-radius:18px; padding:14px 20px; background:linear-gradient(115deg,#145c70,#278b84); color:#fff; margin-bottom:22px; }
         .eyebrow { font-size:12px; letter-spacing:.12em; font-weight:700; text-transform:uppercase; opacity:.85; }
         h2 { font-size:23px; margin:9px 0; } p { line-height:1.5; }
+        .hero h2 { margin:3px 0; font-size:20px; }
+        .hero p { margin:3px 0; line-height:1.4; }
         .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:20px; }
         .card { background:var(--panel-card); border-radius:16px; padding:22px; box-shadow:0 2px 12px #0001; }
         h3 { margin:0 0 8px; font-size:18px; } .muted { color:var(--panel-muted); font-size:14px; }
+        .connection-card { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:12px 22px; }
+        .connection-card h3, .connection-card p { margin:0; }
         label { display:block; margin-top:17px; font-size:14px; font-weight:600; }
         input,select { width:100%; margin-top:7px; padding:11px; border:1px solid var(--panel-divider); border-radius:8px; background:var(--panel-card); color:var(--panel-text); font:inherit; }
         input[type=checkbox] { width:auto; margin-right:8px; }
@@ -82,6 +86,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .rotation-badge { flex:none; color:var(--panel-muted); font-size:12px; }
         .rotation-toggle { display:flex; flex:none; align-items:center; gap:6px; margin:0; font-size:13px; font-weight:normal; }
         .rotation-toggle input { width:auto; margin:0; accent-color:var(--primary-color,#16889a); }
+        .rotation-edit { flex:none; width:40px; height:40px; padding:0; font-size:20px; }
         .rotation-block:has(.rotation-toggle input:not(:checked)) .rotation-description { opacity:.65; }
         dialog.rotation-dialog { width:min(680px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:1px solid var(--panel-divider); border-radius:16px; padding:24px; background:var(--panel-card); color:var(--panel-text); box-shadow:0 12px 40px #0006; }
         dialog.rotation-dialog::backdrop { background:#0009; }
@@ -121,6 +126,9 @@ class DivoomOrchestratorPanel extends HTMLElement {
                 <div id="event-priority-group">
                   <label>Priorität<input id="event-priority" type="number" min="1" max="100" step="1" value="3" required></label>
                   <p class="muted">1 ist die höchste Priorität. Ein wichtigeres Event kann ein laufendes unterbrechen.</p>
+                  <label><input id="event-cooldown-enabled" type="checkbox">Abklingzeit</label>
+                  <label>Abklingzeit (Sekunden)<input id="event-cooldown-seconds" type="number" min="0.01" step="any" disabled></label>
+                  <p class="muted">Gilt ab Beginn für automatische Auslöser und HA-Aktionen; der Testknopf ist ausgenommen.</p>
                   <label>Auslöser<select id="event-trigger-type"><option value="manual">Manuell / Aktion</option><option value="state">Zustandswechsel</option><option value="event">HA-Event</option></select></label>
                   <div id="event-trigger-state" hidden>
                     <label>Entität<input id="event-trigger-entity" placeholder="binary_sensor.bewegung" autocomplete="off"></label>
@@ -132,10 +140,27 @@ class DivoomOrchestratorPanel extends HTMLElement {
                   </div>
                 </div>
                 <div id="event-dates" hidden>
-                  <label>Zeitraum<select id="event-date-mode"><option value="annual">Jährlich wiederkehrend</option><option value="once">Einmalig</option></select></label>
-                  <label>Beginn<input id="event-date-start" type="text" placeholder="MM-TT" autocomplete="off"></label>
-                  <label>Ende<input id="event-date-end" type="text" placeholder="MM-TT" autocomplete="off"></label>
-                  <p class="muted">Beide Tage zählen mit; jährliche Zeiträume dürfen über den Jahreswechsel reichen.</p>
+                  <label>Terminart<select id="event-date-mode"><option value="annual">Zeitraum jährlich</option><option value="once">Zeitraum einmalig</option><option value="weekly">Wöchentlich</option><option value="dates_once">Einzelne Daten einmalig</option><option value="dates_annual">Einzelne Daten jährlich</option><option value="holiday">Feiertage aus HA-Kalender</option></select></label>
+                  <div id="event-date-range">
+                    <label>Beginn<input id="event-date-start" type="date"></label>
+                    <label>Ende<input id="event-date-end" type="date"></label>
+                    <p class="muted">Beide Tage zählen mit; jährliche Zeiträume dürfen über den Jahreswechsel reichen.</p>
+                  </div>
+                  <div id="event-date-weekly" hidden>
+                    <p>Wochentage</p>
+                    <div id="event-weekdays"></div>
+                  </div>
+                  <div id="event-date-list-group" hidden>
+                    <p>Einzelne Daten</p><div id="event-date-list"></div>
+                    <button type="button" class="secondary" id="event-date-add">+ Datum hinzufügen</button>
+                  </div>
+                  <p id="event-date-annual-hint" class="muted">Bei jährlicher Wiederholung wird nur Monat und Tag gespeichert; das gewählte Jahr wird ignoriert.</p>
+                  <div id="event-date-holiday" hidden>
+                    <label>Feiertagskalender<select id="event-calendar"><option value="">Bitte auswählen</option></select></label>
+                    <div class="actions"><button type="button" class="secondary" id="event-holidays-load">Feiertage laden</button></div>
+                    <p class="muted">Die Auswahl enthält Termine der nächsten zwei Jahre. Die Namen müssen mit dem Kalender übereinstimmen.</p>
+                    <div id="event-holidays"></div>
+                  </div>
                 </div>
                 <label>Ausgewählter GIF-Ordner<input id="event-folder" value="." readonly></label>
                 <label>Unterordner öffnen<select id="event-subfolder"><option value="">Kein Unterordner</option></select></label>
@@ -154,6 +179,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
             <div class="actions">
               <button type="button" class="primary" id="event-save">Event speichern</button>
               <button type="button" class="secondary" id="event-test">Gespeichertes Event testen</button>
+              <button type="button" class="secondary" id="event-duplicate">Datums-Event duplizieren</button>
               <button type="button" class="secondary" id="event-delete">Event löschen</button>
             </div>
             <p id="event-message" class="message" role="status" aria-live="polite"></p>
@@ -162,18 +188,17 @@ class DivoomOrchestratorPanel extends HTMLElement {
           </section>
         </div>
         <div id="page-overview" class="grid">
-          <section class="card">
-            <h3>Verbindung</h3>
-            <p id="connection-status" role="status">Status wird geladen …</p>
-            <p class="muted">Der Status stammt vom in den Einstellungen gewählten HA-Sensor, nicht direkt vom Pixoo.</p>
+          <section class="card connection-card">
+            <h3>Verbindung:</h3>
+            <p id="connection-status" role="status" title="Der Status stammt vom in den Einstellungen gewählten HA-Sensor, nicht direkt vom Pixoo.">Status wird geladen …</p>
           </section>
           <section class="card wide">
             <h3>Rotation</h3>
             <p class="muted">Blöcke bearbeiten oder per Drag &amp; Drop verschieben. Änderungen anschließend mit „Rotation speichern“ übernehmen. Die Startanimation bleibt immer vorn.</p>
             <ol class="rotation-preview" id="rotation-blocks" aria-label="Rotationsablauf">
-              <li class="rotation-block"><span class="rotation-icon" aria-hidden="true">✨</span><span class="rotation-description"><strong>Startanimation</strong><span>Ausgewählte GIFs · am Anfang jedes Durchlaufs</span></span><span class="rotation-badge">🔒 Fest</span><button type="button" class="secondary" id="rotation-edit">Bearbeiten</button></li>
-              <li class="rotation-block" data-block="weather" draggable="true"><span class="rotation-icon" aria-hidden="true">🌤️</span><span class="rotation-description"><strong>Wetter</strong><span>Aktuelle Wetteranzeige · verschiebbar</span></span><label class="rotation-toggle"><input id="rotation-weather-enabled" type="checkbox" aria-label="Wetter aktivieren"><span>Inaktiv</span></label><button type="button" class="secondary" id="rotation-weather-edit">Bearbeiten</button></li>
-              <li class="rotation-block" data-block="date" draggable="true"><span class="rotation-icon" aria-hidden="true">📅</span><span class="rotation-description"><strong>Aktive Datums-Events</strong><span>Alle aktiven Events · alphabetisch · verschiebbar</span></span><label class="rotation-toggle"><input id="rotation-date-enabled" type="checkbox" aria-label="Datums-Events aktivieren" checked><span>Aktiv</span></label><button type="button" class="secondary" id="rotation-dates-edit">Bearbeiten</button></li>
+              <li class="rotation-block"><span class="rotation-icon" aria-hidden="true">✨</span><span class="rotation-description"><strong>Startanimation</strong><span>Ausgewählte GIFs · am Anfang jedes Durchlaufs</span></span><span class="rotation-badge">🔒 Fest</span><button type="button" class="secondary rotation-edit" id="rotation-edit" aria-label="Startanimation bearbeiten" title="Startanimation bearbeiten"><ha-icon icon="mdi:cog" aria-hidden="true"></ha-icon></button></li>
+              <li class="rotation-block" data-block="weather" draggable="true"><span class="rotation-icon" aria-hidden="true">🌤️</span><span class="rotation-description"><strong>Wetter</strong><span>Aktuelle Wetteranzeige · verschiebbar</span></span><label class="rotation-toggle"><input id="rotation-weather-enabled" type="checkbox" aria-label="Wetter aktivieren"><span>Inaktiv</span></label><button type="button" class="secondary rotation-edit" id="rotation-weather-edit" aria-label="Wetter bearbeiten" title="Wetter bearbeiten"><ha-icon icon="mdi:cog" aria-hidden="true"></ha-icon></button></li>
+              <li class="rotation-block" data-block="date" draggable="true"><span class="rotation-icon" aria-hidden="true">📅</span><span class="rotation-description"><strong>Aktive Datums-Events</strong><span>Alle aktiven Events · alphabetisch · verschiebbar</span></span><label class="rotation-toggle"><input id="rotation-date-enabled" type="checkbox" aria-label="Datums-Events aktivieren" checked><span>Aktiv</span></label><button type="button" class="secondary rotation-edit" id="rotation-dates-edit" aria-label="Datums-Events bearbeiten" title="Datums-Events bearbeiten"><ha-icon icon="mdi:cog" aria-hidden="true"></ha-icon></button></li>
             </ol>
             <div class="actions"><button type="button" class="secondary" id="rotation-text-add">+ Textblock hinzufügen</button></div>
             <label>Fehlerbild-Anzeigedauer für alle Blöcke (Sekunden)<input id="rotation-error-seconds" type="number" min="0.01" max="3600" step="any" value="5"></label>
@@ -572,8 +597,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
     toggle.append(input, state);
     const edit = document.createElement("button");
     edit.type = "button";
-    edit.className = "secondary";
-    edit.textContent = "Bearbeiten";
+    edit.className = "secondary rotation-edit";
+    const editIcon = document.createElement("ha-icon");
+    editIcon.setAttribute("icon", "mdi:cog");
+    editIcon.setAttribute("aria-hidden", "true");
+    edit.append(editIcon);
+    edit.setAttribute("aria-label", `Textblock ${name.textContent} bearbeiten`);
+    edit.title = `Textblock ${name.textContent} bearbeiten`;
     edit.addEventListener("click", () => this._textEdit(id));
     block.append(icon, description, toggle, edit);
     this._rotationToggle(block);
@@ -602,6 +632,9 @@ class DivoomOrchestratorPanel extends HTMLElement {
             block.querySelector("strong").textContent = settings.name || "Text";
             block.querySelector(".rotation-toggle input").setAttribute("aria-label",
               `Textblock ${settings.name || "Text"} aktivieren`);
+            const edit = block.querySelector(".rotation-edit");
+            edit.setAttribute("aria-label", `Textblock ${settings.name || "Text"} bearbeiten`);
+            edit.title = `Textblock ${settings.name || "Text"} bearbeiten`;
           }
           this.shadowRoot.querySelector("#rotation-dialog-title").textContent =
             `Textblock bearbeiten: ${settings.name || "Text"}`;
@@ -792,12 +825,37 @@ class DivoomOrchestratorPanel extends HTMLElement {
     const get = (id) => this.shadowRoot.querySelector(`#event-${id}`);
     const dirty = () => { this._eventDirty = true; this._eventRevision++; };
     get("name").addEventListener("input", dirty);
-    for (const id of ["enabled", "priority", "date-mode", "date-start", "date-end",
+    for (const id of ["enabled", "priority", "cooldown-enabled", "cooldown-seconds", "date-mode", "date-start", "date-end", "calendar",
       "trigger-type", "trigger-entity", "trigger-to", "trigger-event"]) {
       get(id).addEventListener("change", dirty);
     }
+    get("cooldown-seconds").addEventListener("input", dirty);
+    get("cooldown-enabled").addEventListener("change", () => {
+      const input = get("cooldown-seconds");
+      input.disabled = !get("cooldown-enabled").checked;
+      input.value = input.disabled ? "" : "10";
+    });
     for (const id of ["date-start", "date-end"]) get(id).addEventListener("input", dirty);
     get("date-mode").addEventListener("change", () => this._eventDateMode());
+    ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"].forEach((name, day) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = day;
+      input.addEventListener("change", dirty);
+      label.append(input, document.createTextNode(name));
+      get("weekdays").append(label);
+    });
+    const calendar = get("calendar");
+    Object.keys(this._hass.states).filter((id) => id.startsWith("calendar.")).sort().forEach((id) => {
+      calendar.add(new Option(`${this._hass.states[id].attributes?.friendly_name || id} (${id})`, id));
+    });
+    calendar.addEventListener("change", () => {
+      get("holidays").replaceChildren();
+      this._holidayRequest = (this._holidayRequest || 0) + 1;
+    });
+    get("date-add").addEventListener("click", () => { this._eventDateRow(""); dirty(); });
+    get("holidays-load").addEventListener("click", () => this._eventLoadHolidays());
     get("trigger-type").addEventListener("change", () => this._eventTriggerMode());
     get("choice").addEventListener("change", async () => {
       const selected = get("choice").value;
@@ -842,6 +900,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     get("refresh").addEventListener("click", () => this._eventChangeFolder(get("folder").value));
     get("save").addEventListener("click", () => this._eventSave());
     get("test").addEventListener("click", () => this._eventTest());
+    get("duplicate").addEventListener("click", () => this._eventDuplicate());
     get("delete").addEventListener("click", () => this._eventDelete());
     this._eventLoadInitial();
   }
@@ -905,6 +964,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
   _updateEventKind() {
     this.shadowRoot.querySelector("#event-dates").hidden = this._eventKind !== "date";
     this.shadowRoot.querySelector("#event-priority-group").hidden = this._eventKind !== "trigger";
+    this.shadowRoot.querySelector("#event-duplicate").hidden = this._eventKind !== "date";
     this.shadowRoot.querySelector("#event-kind").textContent = this._eventKind === "date"
       ? "Datums-Event: aktive Events werden in die Rotation eingefügt."
       : "Triggered-Event: wähle einen Auslöser und eine Priorität.";
@@ -917,24 +977,117 @@ class DivoomOrchestratorPanel extends HTMLElement {
   }
 
   _eventDateMode() {
-    const annual = this.shadowRoot.querySelector("#event-date-mode").value === "annual";
-    for (const id of ["start", "end"]) {
-      this.shadowRoot.querySelector(`#event-date-${id}`).placeholder = annual ? "MM-TT" : "JJJJ-MM-TT";
-    }
+    const mode = this.shadowRoot.querySelector("#event-date-mode").value;
+    for (const [id, visible] of [
+      ["range", mode === "annual" || mode === "once"],
+      ["weekly", mode === "weekly"],
+      ["list-group", mode === "dates_once" || mode === "dates_annual"],
+      ["holiday", mode === "holiday"],
+      ["annual-hint", mode === "annual" || mode === "dates_annual"],
+    ]) this.shadowRoot.querySelector(`#event-date-${id}`).hidden = !visible;
   }
 
   _eventSetSchedule(event) {
+    const schedule = event?.schedule || {};
+    const pickerDate = (value) => value && value.length === 5 ? `2000-${value}` : value || "";
     this.shadowRoot.querySelector("#event-enabled").checked = event?.enabled !== false;
     this.shadowRoot.querySelector("#event-priority").value = event?.priority ?? 3;
-    this.shadowRoot.querySelector("#event-date-mode").value = event?.schedule?.mode || "annual";
-    this.shadowRoot.querySelector("#event-date-start").value = event?.schedule?.start || "";
-    this.shadowRoot.querySelector("#event-date-end").value = event?.schedule?.end || "";
+    const cooldown = this.shadowRoot.querySelector("#event-cooldown-seconds");
+    const cooldownEnabled = event?.cooldown_seconds != null;
+    this.shadowRoot.querySelector("#event-cooldown-enabled").checked = cooldownEnabled;
+    cooldown.disabled = !cooldownEnabled;
+    cooldown.value = cooldownEnabled ? event.cooldown_seconds : "";
+    this.shadowRoot.querySelector("#event-date-mode").value = schedule.mode || "annual";
+    this.shadowRoot.querySelector("#event-date-start").value = pickerDate(schedule.start);
+    this.shadowRoot.querySelector("#event-date-end").value = pickerDate(schedule.end);
+    this.shadowRoot.querySelectorAll("#event-weekdays input").forEach((input) => {
+      input.checked = (schedule.weekdays || []).includes(Number(input.value));
+    });
+    this.shadowRoot.querySelector("#event-date-list").replaceChildren();
+    for (const day of schedule.dates || []) this._eventDateRow(pickerDate(day));
+    const calendar = this.shadowRoot.querySelector("#event-calendar");
+    if (schedule.calendar && !Array.from(calendar.options).some((option) => option.value === schedule.calendar)) {
+      calendar.add(new Option(`${schedule.calendar} (nicht verfügbar)`, schedule.calendar));
+    }
+    calendar.value = schedule.calendar || "";
+    this._holidayRequest = (this._holidayRequest || 0) + 1;
+    this._eventHolidayRows(schedule.holidays || [], schedule.holidays || []);
+    if (schedule.mode === "holiday" && schedule.calendar) this._eventLoadHolidays();
     this.shadowRoot.querySelector("#event-trigger-type").value = event?.trigger?.type || "manual";
     this.shadowRoot.querySelector("#event-trigger-entity").value = event?.trigger?.entity_id || "";
     this.shadowRoot.querySelector("#event-trigger-to").value = event?.trigger?.to || "";
     this.shadowRoot.querySelector("#event-trigger-event").value = event?.trigger?.event_type || "";
     this._eventTriggerMode();
     this._eventDateMode();
+  }
+
+  _eventDateRow(value) {
+    const row = document.createElement("div");
+    row.className = "event-row";
+    const input = document.createElement("input");
+    input.type = "date";
+    input.value = value;
+    input.setAttribute("aria-label", "Einzelnes Datum");
+    const dirty = () => { this._eventDirty = true; this._eventRevision++; };
+    input.addEventListener("input", dirty);
+    input.addEventListener("change", dirty);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary";
+    remove.textContent = "Entfernen";
+    remove.addEventListener("click", () => { row.remove(); dirty(); });
+    row.append(input, remove);
+    this.shadowRoot.querySelector("#event-date-list").append(row);
+  }
+
+  _eventHolidayRows(names, selected) {
+    const list = this.shadowRoot.querySelector("#event-holidays");
+    list.replaceChildren();
+    for (const name of names) {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = name;
+      input.checked = selected.includes(name);
+      input.addEventListener("change", () => { this._eventDirty = true; this._eventRevision++; });
+      label.append(input, document.createTextNode(name));
+      list.append(label);
+    }
+  }
+
+  async _eventLoadHolidays() {
+    const calendar = this.shadowRoot.querySelector("#event-calendar").value;
+    if (!calendar) return this._eventMessage("Bitte einen Feiertagskalender auswählen.", true);
+    const request = this._holidayRequest = (this._holidayRequest || 0) + 1;
+    this._eventMessage("Feiertage werden geladen …");
+    try {
+      const names = await this._hass.callWS({type: "divoom_orchestrator/holiday_names", calendar});
+      if (request !== this._holidayRequest) return;
+      const selected = Array.from(this.shadowRoot.querySelectorAll("#event-holidays input:checked"), (input) => input.value);
+      this._eventHolidayRows(Array.from(new Set([...selected, ...names])), selected);
+      this._eventMessage(`${names.length} Feiertag(e) geladen.`);
+    } catch (error) {
+      if (request === this._holidayRequest) this._eventMessage(`Feiertage konnten nicht geladen werden: ${error.message || String(error)}`, true);
+    }
+  }
+
+  _eventDuplicate() {
+    if (this._eventLoading || this._eventSaving || this._eventKind !== "date" || !this._eventSelected) {
+      return this._eventMessage("Bitte zuerst ein gespeichertes Datums-Event auswählen.", true);
+    }
+    const original = this.shadowRoot.querySelector("#event-name").value.trim() || this._eventSelected;
+    let number = 1;
+    let name;
+    do {
+      const suffix = number === 1 ? " (Kopie)" : ` (Kopie ${number})`;
+      name = original.slice(0, 80 - suffix.length) + suffix;
+      number++;
+    } while (this._events[name]);
+    this._eventChoices("");
+    this.shadowRoot.querySelector("#event-name").value = name;
+    this._eventDirty = true;
+    this._eventRevision++;
+    this._eventMessage("Kopie als Entwurf erstellt; zum Anlegen speichern.");
   }
 
   async _eventChangeFolder(folder) {
@@ -1083,6 +1236,12 @@ class DivoomOrchestratorPanel extends HTMLElement {
     if (this._eventKind === "trigger") {
       if (!get("priority").reportValidity()) return;
       event.priority = Number(get("priority").value);
+      if (get("cooldown-enabled").checked) {
+        const cooldown = get("cooldown-seconds");
+        if (!cooldown.value || !cooldown.reportValidity()) return this._eventMessage("Bitte eine gültige Abklingzeit eingeben.", true);
+        event.cooldown_seconds = Number(cooldown.value);
+        if (!Number.isFinite(event.cooldown_seconds) || event.cooldown_seconds <= 0) return this._eventMessage("Bitte eine gültige Abklingzeit eingeben.", true);
+      }
       const type = get("trigger-type").value;
       event.trigger = {type};
       if (type === "state") {
@@ -1095,13 +1254,25 @@ class DivoomOrchestratorPanel extends HTMLElement {
       }
     }
     if (this._eventKind === "date") {
-      event.schedule = {
-        mode: get("date-mode").value,
-        start: get("date-start").value.trim(),
-        end: get("date-end").value.trim(),
-      };
-      if (!event.schedule.start || !event.schedule.end) {
-        return this._eventMessage("Bitte Beginn und Ende des Datums-Events eingeben.", true);
+      const mode = get("date-mode").value;
+      event.schedule = {mode};
+      if (mode === "annual" || mode === "once") {
+        const start = get("date-start").value, end = get("date-end").value;
+        if (!start || !end) return this._eventMessage("Bitte Beginn und Ende auswählen.", true);
+        event.schedule.start = mode === "annual" ? start.slice(5) : start;
+        event.schedule.end = mode === "annual" ? end.slice(5) : end;
+      } else if (mode === "weekly") {
+        event.schedule.weekdays = Array.from(get("weekdays").querySelectorAll("input:checked"), (input) => Number(input.value));
+        if (!event.schedule.weekdays.length) return this._eventMessage("Bitte Wochentage auswählen.", true);
+      } else if (mode === "dates_once" || mode === "dates_annual") {
+        const values = Array.from(get("date-list").querySelectorAll("input"), (input) => input.value);
+        if (!values.length || values.some((value) => !value)) return this._eventMessage("Bitte mindestens ein vollständiges Datum auswählen.", true);
+        event.schedule.dates = values.map((value) => mode === "dates_annual" ? value.slice(5) : value);
+        if (new Set(event.schedule.dates).size !== values.length) return this._eventMessage("Bitte jedes Datum nur einmal auswählen.", true);
+      } else if (mode === "holiday") {
+        event.schedule.calendar = get("calendar").value;
+        event.schedule.holidays = Array.from(get("holidays").querySelectorAll("input:checked"), (input) => input.value);
+        if (!event.schedule.calendar || !event.schedule.holidays.length) return this._eventMessage("Bitte Kalender und Feiertage auswählen.", true);
       }
     }
     const revision = this._eventRevision;

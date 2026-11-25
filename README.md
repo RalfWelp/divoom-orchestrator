@@ -76,14 +76,34 @@ und die Ordner-Playlist verwendet. Bereits gespeicherte Event-Gerätekennungen
 werden nicht für die Wiedergabe verwendet. Service-Aufrufe mit expliziter
 Gerätekennung bleiben unverändert.
 Die Seitenleiste gruppiert gespeicherte Einträge in Triggered-Events und
-Datums-Events. Für Datums-Events können jährliche oder einmalige Zeiträume
-und ein Aktivierungszustand gespeichert werden. Beide Grenztage zählen mit;
-jährliche Zeiträume dürfen über den Jahreswechsel reichen. Aktivierte Events
-werden im Datumsblock anhand des lokalen HA-Datums ausgewertet.
+Datums-Events. Datums-Events unterstützen einmalige oder jährliche Zeiträume,
+mehrere einzelne einmalige oder jährlich wiederkehrende Daten, mehrere
+Wochentage sowie ausgewählte Feiertage aus einem HA-Kalender. Daten werden
+über den Kalender des Browsers ausgewählt; bei jährlichen Terminen wird das
+ausgewählte Jahr ignoriert. Beide Grenztage zählen mit; jährliche Zeiträume
+dürfen über den Jahreswechsel reichen. Ein gespeichertes Datums-Event lässt
+sich als neuen Entwurf duplizieren und unter einem anderen Namen speichern.
+Aktivierte Events werden im Datumsblock anhand des lokalen HA-Datums
+ausgewertet.
+
+Für Feiertage zunächst die Home-Assistant-Integration
+[Holiday](https://www.home-assistant.io/integrations/holiday/) mit Land und
+gegebenenfalls Bundesland einrichten. Im Event den Kalender auswählen,
+„Feiertage laden“ drücken und die gewünschten Namen markieren. Die Auswahl
+umfasst die kommenden zwei Jahre; Ereignisse mit mehreren durch Semikolon
+getrennten Feiertagsnamen werden berücksichtigt. Bei Änderungen der
+Kalendersprache müssen die gespeicherten Namen gegebenenfalls neu gewählt
+werden. Ein nicht verfügbarer Kalender wird als Rotationsfehler gemeldet.
 Triggered-Events unterstützen einen Zustandswechsel einer HA-Entität, einen
 HA-Eventtyp oder die manuelle Aktion `divoom_orchestrator.trigger`.
 Ein bereits beim Start aktiver Zustand löst nicht aus. Deaktivierte Events
 werden automatisch und über die Aktion nicht ausgelöst.
+Optional kann pro Triggered-Event eine Abklingzeit in Sekunden aktiviert
+werden (Vorgabe 10 Sekunden). Sie beginnt mit der tatsächlichen Wiedergabe
+und gilt für automatische Auslöser und die Aktion. Auslöser während der
+Abklingzeit werden ignoriert, die Aktion meldet einen Fehler. Der Testknopf
+ignoriert und startet keine Abklingzeit; die Prioritätsregeln gelten weiterhin.
+Nach einem Neustart von Home Assistant beginnt die Abklingzeit nicht erneut.
 Bei neuen Datums-Events öffnet der Browser den Ordner `date_events`, falls
 dieser existiert. Anderenfalls beginnt er im Stammordner. Der ausgewählte
 GIF-Ordner zeigt die aktuell geladenen GIFs; mit „Unterordner öffnen“ kann

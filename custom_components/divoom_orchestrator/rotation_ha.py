@@ -15,7 +15,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .date_rules import is_active
+from .date_rules import is_active, validate_schedule
 from .events_ha import STEP, valid_value
 from .playlist import scan_gifs
 from .text_ha import TEXT, duration as text_duration, validate_text
@@ -138,15 +138,25 @@ class RotationRuntime:
                     sequence.extend(await self._fallback("wetter", config["error_seconds"]))
             elif block == "date":
                 today = dt_util.now().date()
+                holiday_names = {}
                 for name in sorted(saved, key=lambda value: (value.casefold(), value)):
                     event = saved[name]
                     if event.get("kind") != "date" or not event.get("enabled", True):
                         continue
                     try:
-                        if not is_active(event["schedule"], today):
+                        schedule = event["schedule"]
+                        if schedule["mode"] == "holiday":
+                            validate_schedule(schedule)
+                            calendar = schedule["calendar"]
+                            if calendar not in holiday_names:
+                                holiday_names[calendar] = await events.calendar_holidays(calendar, 1)
+                            names = holiday_names[calendar]
+                            if not names.intersection(schedule["holidays"]):
+                                continue
+                        elif not is_active(schedule, today):
                             continue
                         sequence.extend(await events.prepare(event))
-                    except (KeyError, OSError, ValueError, vol.Invalid) as err:
+                    except (KeyError, OSError, ValueError, vol.Invalid, HomeAssistantError) as err:
                         await self._report("date", f"{name}: {err}")
                         sequence.extend(await self._fallback("datum", config["error_seconds"]))
             elif block.startswith("text:"):

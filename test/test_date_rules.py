@@ -38,3 +38,30 @@ class DateRulesTests(unittest.TestCase):
         ):
             with self.subTest(schedule=schedule), self.assertRaises(ValueError):
                 rules.validate_schedule(schedule)
+
+    def test_weekly_and_individual_dates(self):
+        weekly = {"mode": "weekly", "weekdays": [0, 4, 6]}
+        self.assertTrue(rules.is_active(weekly, date(2026, 11, 23)))
+        self.assertFalse(rules.is_active(weekly, date(2026, 11, 24)))
+        for mode, values in (
+            ("dates_once", ["2028-02-29", "2028-12-25"]),
+            ("dates_annual", ["02-29", "12-25"]),
+        ):
+            schedule = {"mode": mode, "dates": values}
+            self.assertTrue(rules.is_active(schedule, date(2028, 2, 29)))
+            self.assertFalse(rules.is_active(schedule, date(2027, 2, 28)))
+            self.assertEqual(rules.is_active(schedule, date(2029, 12, 25)), mode == "dates_annual")
+
+    def test_new_schedules_reject_invalid_values(self):
+        for schedule in (
+            {"mode": "weekly", "weekdays": []},
+            {"mode": "weekly", "weekdays": [0, 0]},
+            {"mode": "weekly", "weekdays": [True]},
+            {"mode": "weekly", "weekdays": [7]},
+            {"mode": "dates_annual", "dates": ["02-30"]},
+            {"mode": "dates_once", "dates": ["2026-01-01", "2026-01-01"]},
+            {"mode": "holiday", "calendar": "sensor.bad", "holidays": ["Ostern"]},
+            {"mode": "holiday", "calendar": "calendar.holiday", "holidays": []},
+        ):
+            with self.subTest(schedule=schedule), self.assertRaises(ValueError):
+                rules.validate_schedule(schedule)

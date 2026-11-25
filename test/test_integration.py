@@ -351,6 +351,82 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         await store.delete("Door")
         self.assertEqual(self.hass.bus_listeners, [])
 
+    async def test_trigger_cooldown_starts_on_play_and_excludes_test_button(self):
+        data = self.hass.data["divoom_orchestrator"]
+        store, brightness = data["events"], data["brightness"]
+        brightness.config.update(device="pixoo", enabled=True)
+        brightness.controller.refresh = AsyncMock()
+        brightness.controller.event_started = unittest.mock.Mock()
+        brightness.controller.event_finished = unittest.mock.Mock()
+        event = {"kind": "trigger", "folder": "rain", "cooldown_seconds": 10, "steps": [
+            {"file": "rain/one.gif", "mode": "seconds", "value": 0.01},
+        ]}
+        await store.save("Door", event, ["rain/one.gif"])
+        module = sys.modules["test_divoom_orchestrator.events_ha"]
+        with patch.object(module, "monotonic", return_value=100) as clock:
+            action = self.hass.services.handlers["divoom_orchestrator", "trigger"]
+            await action(types.SimpleNamespace(data={"name": "Door"}))
+            self.assertNotIn("Door", store._started_at)
+            await asyncio.sleep(0.05)
+            self.assertEqual(store._started_at["Door"], 100)
+            with self.assertRaisesRegex(FakeError, "Cooldown active"):
+                await action(types.SimpleNamespace(data={"name": "Door"}))
+            await store._run_trigger("Door")
+            self.assertEqual(brightness.controller.event_started.call_count, 1)
+
+            clock.return_value = 105
+            handler = module.websocket_test
+            connection = types.SimpleNamespace(send_result=unittest.mock.Mock(), send_error=unittest.mock.Mock())
+            await handler(self.hass, connection, {"id": 8, "name": "Door"})
+            connection.send_result.assert_called_once_with(8)
+            await asyncio.sleep(0.05)
+            self.assertEqual(store._started_at["Door"], 100)
+            with self.assertRaisesRegex(FakeError, "Cooldown active"):
+                await action(types.SimpleNamespace(data={"name": "Door"}))
+            clock.return_value = 110
+            await action(types.SimpleNamespace(data={"name": "Door"}))
+            await asyncio.sleep(0.05)
+            self.assertEqual(store._started_at["Door"], 110)
+            await store.delete("Door")
+            self.assertNotIn("Door", store._started_at)
+
+    async def test_disabled_cooldown_does_not_limit_triggers(self):
+        data = self.hass.data["divoom_orchestrator"]
+        store, brightness = data["events"], data["brightness"]
+        brightness.config.update(device="pixoo", enabled=True)
+        brightness.controller.refresh = AsyncMock()
+        event = {"kind": "trigger", "folder": "rain", "steps": [
+            {"file": "rain/one.gif", "mode": "seconds", "value": 0.01},
+        ]}
+        await store.save("Door", event, ["rain/one.gif"])
+        for _ in range(2):
+            await store.play_event("Door", automatic=True)
+            await asyncio.sleep(0.05)
+        self.assertNotIn("Door", store._started_at)
+        self.assertEqual(sum(call[:2] == ("divoom", "image") for call in self.hass.services.calls), 2)
+
+    async def test_rejected_trigger_does_not_start_cooldown(self):
+        data = self.hass.data["divoom_orchestrator"]
+        store, brightness = data["events"], data["brightness"]
+        brightness.config.update(device="pixoo", enabled=True)
+        brightness.controller.refresh = AsyncMock()
+        event = {"kind": "trigger", "folder": "rain", "cooldown_seconds": 10, "priority": 1,
+                 "steps": [{"file": "rain/one.gif", "mode": "seconds", "value": 0.2}]}
+        await store.save("High", event, ["rain/one.gif"])
+        event["priority"] = 2
+        await store.save("Low", event, ["rain/one.gif"])
+        await store.play_event("High")
+        await asyncio.sleep(0.02)
+        with self.assertRaisesRegex(ValueError, "equal or higher priority"):
+            await store.play_event("Low")
+        self.assertIn("High", store._started_at)
+        self.assertNotIn("Low", store._started_at)
+        await data["controller"].stop()
+        await store.play_event("Low")
+        await asyncio.sleep(0.02)
+        self.assertIn("Low", store._started_at)
+        await data["controller"].stop()
+
     async def test_weather_failure_displays_error_image_and_notifies(self):
         data = self.hass.data["divoom_orchestrator"]
         rotation = data["rotation"]
@@ -777,6 +853,73 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         event["schedule"] = {"mode": "once", "start": "2027-01-02", "end": "2027-01-01"}
         with self.assertRaisesRegex(ValueError, "End date"):
             await store.save("Weihnachten", event, ["rain/one.gif"])
+
+    async def test_calendar_holidays_rotation_and_unavailable_calendar(self):
+        data = self.hass.data["divoom_orchestrator"]
+        store, rotation = data["events"], data["rotation"]
+        event = {"kind": "date", "enabled": True, "folder": "rain", "steps": [
+            {"file": "rain/one.gif", "mode": "seconds", "value": 2.0},
+        ], "schedule": {"mode": "holiday", "calendar": "calendar.holidays",
+                        "holidays": ["Silvester"]}}
+        await store.save("Holiday", event, ["rain/one.gif"])
+        rotation.config = {"folder": "rain", "steps": event["steps"], "date_events": True,
+                           "error_seconds": 2, "blocks": ["date"]}
+        self.hass.states.get = lambda entity: types.SimpleNamespace(state="on")
+        original_call = self.hass.services.async_call
+        calendar_call = AsyncMock(return_value={"calendar.holidays": {"events": [
+            {"summary": "Silvester; Anderer Feiertag", "start": "2026-12-31"},
+            {"summary": "Neujahr", "start": "2027-01-01"},
+        ]}})
+
+        async def service_call(domain, name, data, **kwargs):
+            if domain == "calendar":
+                return await calendar_call(domain, name, data, **kwargs)
+            return await original_call(domain, name, data, **kwargs)
+
+        self.hass.services.async_call = service_call
+        sequence = await rotation._sequence()
+        self.assertEqual(len(sequence), 2)
+        call = calendar_call.call_args
+        self.assertTrue(call.kwargs["return_response"])
+        self.assertEqual(call.args[2]["start_date_time"][:10], "2026-12-31")
+        self.assertEqual(call.args[2]["end_date_time"][:10], "2027-01-01")
+        self.assertNotIn("Neujahr", await store.calendar_holidays("calendar.holidays", 1))
+        calendar_call.reset_mock()
+        names = await store.calendar_holidays("calendar.holidays", 730)
+        self.assertIn("Neujahr", names)
+        self.assertEqual(calendar_call.await_count, 2)
+        event["schedule"]["holidays"] = ["Ostern"]
+        await store.save("Holiday", event, ["rain/one.gif"])
+        self.assertEqual(len(await rotation._sequence()), 1)
+        self.hass.states.get = lambda entity: types.SimpleNamespace(state="unavailable")
+        with self.assertRaisesRegex(ValueError, "Calendar unavailable"):
+            await store.calendar_holidays("calendar.holidays", 1)
+
+    async def test_real_event_schema_accepts_new_schedules(self):
+        spec = importlib.util.spec_from_file_location(
+            "test_divoom_orchestrator.actual_event_schema", PACKAGE / "events_ha.py"
+        )
+        actual = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"voluptuous": real_vol}):
+            spec.loader.exec_module(actual)
+        event = {"kind": "date", "folder": "rain", "steps": [
+            {"file": "rain/one.gif", "mode": "seconds", "value": 2},
+        ]}
+        for schedule in (
+            {"mode": "weekly", "weekdays": [0, 6]},
+            {"mode": "dates_once", "dates": ["2026-12-25"]},
+            {"mode": "dates_annual", "dates": ["02-29"]},
+            {"mode": "holiday", "calendar": "calendar.holidays", "holidays": ["Ostern"]},
+        ):
+            event["schedule"] = schedule
+            self.assertEqual(actual.EVENT_SCHEMA(event)["schedule"], schedule)
+
+        event["cooldown_seconds"] = 10
+        self.assertEqual(actual.EVENT_SCHEMA(event)["cooldown_seconds"], 10)
+        for value in (0, -1, float("nan"), float("inf")):
+            event["cooldown_seconds"] = value
+            with self.subTest(value=value), self.assertRaises(real_vol.Invalid):
+                actual.EVENT_SCHEMA(event)
 
     async def test_event_loop_duration_uses_gif_frame_times(self):
         output = io.BytesIO()
