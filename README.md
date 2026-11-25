@@ -71,7 +71,7 @@ keine globalen Theme-Einstellungen.
 
 Hier lassen sich 16×16-Werke anonym nach Begriff und Sortierung suchen und
 als animierte Vorschau betrachten. Der Suchbegriff wird an Divoom übermittelt.
-Im Zielordnerbrowser einen vorhandenen Ordner unter `/config/pixelart` wählen
+Im aufklappbaren Zielordnerbaum einen vorhandenen Ordner unter `/config/pixelart` wählen
 und ein einzelnes Werk als GIF speichern. Dafür benötigt Home Assistant
 Schreibzugriff; bestehende `divoom-<ID>.gif`-Dateien werden nicht überschrieben.
 Der Speicherstatus steht direkt unter der Schaltfläche des jeweiligen Werks.
@@ -126,8 +126,9 @@ ignoriert und startet keine Abklingzeit; die Prioritätsregeln gelten weiterhin.
 Nach einem Neustart von Home Assistant beginnt die Abklingzeit nicht erneut.
 Bei neuen Datums-Events öffnet der Browser den Ordner `date_events`, falls
 dieser existiert. Anderenfalls beginnt er im Stammordner. Der ausgewählte
-GIF-Ordner zeigt die aktuell geladenen GIFs; mit „Unterordner öffnen“ kann
-man in einen seiner direkten Unterordner wechseln.
+GIF-Ordner zeigt die aktuell geladenen GIFs; im aufklappbaren Ordnerbaum
+kann man auch tiefer verschachtelte Ordner direkt auswählen. Die Pfeile öffnen
+und schließen Zweige, die Aktualisieren-Schaltfläche lädt den Baum erneut.
 Die Reihenfolge lässt sich über die Pfeile ändern. Pro GIF gelten Sekunden
 oder eine ganzzahlige Zahl geschätzter GIF-Durchläufe; dieselbe Datei kann in
 verschiedenen Events andere Einstellungen haben. Neue Dateien bleiben zunächst

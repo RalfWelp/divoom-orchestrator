@@ -7,7 +7,7 @@ from homeassistant.components import panel_custom
 from homeassistant.core import HomeAssistant
 
 PANEL_URL = "/divoom-orchestrator-static/panel.js"
-PANEL_VERSION = "0.4.11"
+PANEL_VERSION = "0.4.12"
 
 
 async def async_register_panel(hass: HomeAssistant) -> None:

@@ -94,6 +94,20 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .community-item small { color:var(--panel-muted); }
         .community-item button { width:100%; margin-top:10px; }
         .community-item .error { font-size:13px; }
+        .folder-browser { margin-top:17px; }
+        .folder-browser-title { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:14px; font-weight:600; }
+        .folder-refresh { display:grid; place-items:center; width:36px; height:36px; padding:0; }
+        .folder-tree { max-height:270px; overflow:auto; margin-top:6px; padding:8px; border:1px solid var(--panel-divider); border-radius:10px; background:var(--panel-secondary); }
+        .folder-tree ul { list-style:none; margin:0; padding:0; }
+        .folder-tree ul ul { margin-left:19px; padding-left:5px; border-left:1px solid var(--panel-divider); }
+        .folder-row { display:flex; align-items:center; min-width:0; }
+        .folder-toggle { display:grid; place-items:center; width:32px; height:36px; padding:0; flex:none; background:transparent; color:var(--panel-muted); }
+        .folder-toggle:disabled { cursor:default; opacity:.25; }
+        .folder-select { display:flex; align-items:center; gap:8px; flex:1; min-width:0; padding:7px 8px; background:transparent; color:var(--panel-text); text-align:left; font-weight:normal; overflow-wrap:anywhere; }
+        .folder-select ha-icon { flex:none; color:var(--panel-muted); }
+        .folder-select[aria-pressed="true"] { background:var(--primary-color,#16889a); color:white; font-weight:600; }
+        .folder-select[aria-pressed="true"] ha-icon { color:inherit; }
+        .folder-node-status { display:block; margin:2px 0 4px 40px; font-size:13px; }
         .rotation-block:has(.rotation-toggle input:not(:checked)) .rotation-description { opacity:.65; }
         dialog.rotation-dialog { width:min(680px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:1px solid var(--panel-divider); border-radius:16px; padding:24px; background:var(--panel-card); color:var(--panel-text); box-shadow:0 12px 40px #0006; }
         dialog.rotation-dialog::backdrop { background:#0009; }
@@ -121,8 +135,10 @@ class DivoomOrchestratorPanel extends HTMLElement {
               <div class="actions"><button type="submit" class="primary">Suchen</button></div>
             </form>
             <label>Zielordner unter pixelart<input id="community-folder" value="." readonly></label>
-            <label>Unterordner<select id="community-subfolder"><option value="">Kein Unterordner</option></select></label>
-            <div class="actions"><button type="button" class="secondary" id="community-up">⬆ Überordner</button><button type="button" class="secondary" id="community-open">Ordner öffnen</button></div>
+            <div class="folder-browser">
+              <div class="folder-browser-title"><span>Ordner auswählen</span><button type="button" class="secondary folder-refresh" id="community-tree-refresh" aria-label="Community-Ordnerbaum aktualisieren" title="Ordnerbaum aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button></div>
+              <div class="folder-tree" id="community-tree" aria-label="Community-Zielordner"></div>
+            </div>
             <p id="community-message" class="message" role="status" aria-live="polite"></p>
             <div id="community-results" class="community-grid"></div>
             <div class="actions"><button type="button" class="secondary" id="community-prev" disabled>Zurück</button><span id="community-page"></span><button type="button" class="secondary" id="community-next" disabled>Weiter</button></div>
@@ -188,12 +204,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
                   </div>
                 </div>
                 <label>Ausgewählter GIF-Ordner<input id="event-folder" value="." readonly></label>
-                <label>Unterordner öffnen<select id="event-subfolder"><option value="">Kein Unterordner</option></select></label>
-                <p class="muted">Die GIFs stammen aus dem ausgewählten Ordner. Wähle einen Unterordner und öffne ihn, um dorthin zu wechseln.</p>
+                <div class="folder-browser">
+                  <div class="folder-browser-title"><span>Ordner auswählen</span><button type="button" class="secondary folder-refresh" id="event-tree-refresh" aria-label="Event-Ordnerbaum aktualisieren" title="Ordnerbaum aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button></div>
+                  <div class="folder-tree" id="event-tree" aria-label="Event-GIF-Ordner"></div>
+                </div>
+                <p class="muted">Die GIFs stammen aus dem ausgewählten Ordner. Ordnernamen auswählen; Pfeile öffnen oder schließen Unterordner.</p>
                 <div class="actions">
-                  <button type="button" class="secondary" id="event-up">⬆ Überordner</button>
-                  <button type="button" class="secondary" id="event-open">Ordner öffnen</button>
-                  <button type="button" class="secondary" id="event-refresh">Ordner aktualisieren</button>
+                  <button type="button" class="secondary" id="event-refresh">GIFs aktualisieren</button>
                 </div>
               </div>
               <div>
@@ -402,11 +419,140 @@ class DivoomOrchestratorPanel extends HTMLElement {
     }
   }
 
+  _folderTree(container, onSelect) {
+    let nodes = new Map();
+    let selected = ".";
+    let generation = 0;
+    let selectionRevision = 0;
+    let root;
+
+    const createNode = (path, list) => {
+      const name = path === "." ? "pixelart" : path.split("/").pop();
+      const li = document.createElement("li");
+      const row = document.createElement("div");
+      row.className = "folder-row";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "folder-toggle";
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-label", `${name} aufklappen`);
+      toggle.innerHTML = '<ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>';
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "folder-select";
+      button.dataset.folder = path;
+      button.setAttribute("aria-pressed", String(path === selected));
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", "mdi:folder");
+      icon.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.textContent = name;
+      button.append(icon, label);
+      button.addEventListener("click", () => onSelect(path));
+      const status = document.createElement("small");
+      status.className = "folder-node-status";
+      status.setAttribute("role", "status");
+      const children = document.createElement("ul");
+      children.hidden = true;
+      const node = {path, toggle, button, status, children, loaded: false, loading: null, generation};
+      toggle.addEventListener("click", () => {
+        if (toggle.getAttribute("aria-expanded") === "true") {
+          setExpanded(node, false);
+        } else {
+          open(node);
+        }
+      });
+      row.append(toggle, button);
+      li.append(row, status, children);
+      list.append(li);
+      nodes.set(path, node);
+      return node;
+    };
+
+    const setExpanded = (node, expanded) => {
+      node.toggle.setAttribute("aria-expanded", String(expanded));
+      node.toggle.setAttribute("aria-label", `${node.path === "." ? "pixelart" : node.path.split("/").pop()} ${expanded ? "zuklappen" : "aufklappen"}`);
+      node.toggle.firstElementChild.setAttribute("icon", expanded ? "mdi:chevron-down" : "mdi:chevron-right");
+      node.children.hidden = !expanded;
+    };
+
+    const loadChildren = (node) => {
+      if (node.loaded) return Promise.resolve(true);
+      if (node.loading) return node.loading;
+      node.status.classList.remove("error");
+      node.status.textContent = "Unterordner werden geladen …";
+      node.loading = (async () => {
+        try {
+          const folders = await this._hass.callWS({type: "divoom_orchestrator/event_folders", folder: node.path});
+          if (node.generation !== generation) return false;
+          folders.forEach((folder) => createNode(folder, node.children));
+          node.loaded = true;
+          node.toggle.disabled = folders.length === 0;
+          if (!folders.length) setExpanded(node, false);
+          node.status.textContent = "";
+          return true;
+        } catch (error) {
+          if (node.generation === generation) {
+            node.status.classList.add("error");
+            node.status.textContent = `Unterordner konnten nicht geladen werden: ${error.message || String(error)}. Zum erneuten Versuch zuklappen und wieder öffnen.`;
+          }
+          return false;
+        } finally {
+          node.loading = null;
+        }
+      })();
+      return node.loading;
+    };
+
+    const open = async (node) => {
+      setExpanded(node, true);
+      return await loadChildren(node);
+    };
+
+    const select = async (path) => {
+      selected = path;
+      const request = ++selectionRevision;
+      for (const node of nodes.values()) {
+        node.button.setAttribute("aria-pressed", String(node.path === selected));
+        if (node.loaded && node.status.classList.contains("error")) {
+          node.status.classList.remove("error");
+          node.status.textContent = "";
+        }
+      }
+      let node = root;
+      const parts = path === "." ? [] : path.split("/");
+      for (const [index] of parts.entries()) {
+        if (!await open(node) || request !== selectionRevision) return;
+        const child = nodes.get(parts.slice(0, index + 1).join("/"));
+        if (!child) {
+          node.status.classList.add("error");
+          node.status.textContent = `Ausgewählter Ordner ${path} ist im Baum nicht verfügbar.`;
+          return;
+        }
+        node = child;
+      }
+      if (request === selectionRevision) node.button.setAttribute("aria-pressed", "true");
+    };
+
+    const refresh = () => {
+      generation++;
+      selectionRevision++;
+      nodes = new Map();
+      const list = document.createElement("ul");
+      container.replaceChildren(list);
+      root = createNode(".", list);
+      setExpanded(root, true);
+      select(selected);
+      if (selected === ".") open(root);
+    };
+    refresh();
+    return {select, refresh};
+  }
+
   _initCommunity() {
     const root = this.shadowRoot;
     const form = root.querySelector("#community-search");
     const folder = root.querySelector("#community-folder");
-    const subfolder = root.querySelector("#community-subfolder");
     const message = root.querySelector("#community-message");
     const results = root.querySelector("#community-results");
     const prev = root.querySelector("#community-prev");
@@ -440,25 +586,18 @@ class DivoomOrchestratorPanel extends HTMLElement {
       const requestRevision = ++folderRevision;
       folderReady = false;
       try {
-        const children = await this._hass.callWS({type: "divoom_orchestrator/event_folders", folder: value});
+        await this._hass.callWS({type: "divoom_orchestrator/event_folders", folder: value});
         if (requestRevision !== folderRevision) return;
         folder.value = value;
-        subfolder.replaceChildren(new Option("Kein Unterordner", ""));
-        children.forEach((child) => subfolder.add(new Option(child.split("/").pop(), child)));
+        tree.select(value);
         folderReady = true;
         report(`Zielordner: ${value}`);
       } catch (error) {
         if (requestRevision === folderRevision) report(`Ordner konnte nicht geladen werden: ${error.message || String(error)}`, true);
       }
     };
-    root.querySelector("#community-open").addEventListener("click", () => {
-      if (subfolder.value) loadFolder(subfolder.value);
-    });
-    root.querySelector("#community-up").addEventListener("click", () => {
-      const parts = folder.value.split("/");
-      parts.pop();
-      loadFolder(parts.join("/") || ".");
-    });
+    const tree = this._folderTree(root.querySelector("#community-tree"), loadFolder);
+    root.querySelector("#community-tree-refresh").addEventListener("click", () => tree.refresh());
     const loadPage = async (page) => {
       const requestRevision = ++revision;
       prev.disabled = next.disabled = true;
@@ -1077,13 +1216,8 @@ class DivoomOrchestratorPanel extends HTMLElement {
         await this._eventLoadDefaultFolder();
       });
     });
-    get("open").addEventListener("click", () => {
-      if (get("subfolder").value) this._eventChangeFolder(get("subfolder").value);
-    });
-    get("up").addEventListener("click", () => {
-      const folder = get("folder").value;
-      if (folder !== ".") this._eventChangeFolder(folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : ".");
-    });
+    this._eventTree = this._folderTree(get("tree"), (folder) => this._eventChangeFolder(folder));
+    get("tree-refresh").addEventListener("click", () => this._eventTree.refresh());
     get("refresh").addEventListener("click", () => this._eventChangeFolder(get("folder").value));
     get("save").addEventListener("click", () => this._eventSave());
     get("test").addEventListener("click", () => this._eventTest());
@@ -1288,8 +1422,8 @@ class DivoomOrchestratorPanel extends HTMLElement {
         file: row.dataset.file, mode: row.querySelector("select").value,
         value: row.querySelector('input[type="number"]').value,
       })) : [];
-    await this._eventLoadFolder(folder, selected);
-    if (!sameFolder) {
+    const loaded = await this._eventLoadFolder(folder, selected);
+    if (loaded && !sameFolder) {
       this._eventDirty = true;
       this._eventRevision++;
     }
@@ -1301,18 +1435,16 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this._eventFolderReady = false;
     this._eventMessage("Ordner wird geladen …");
     try {
-      const [subfolders, files] = await Promise.all([
+      const [, files] = await Promise.all([
         this._hass.callWS({type: "divoom_orchestrator/event_folders", folder}),
         this._hass.callWS({type: "divoom_orchestrator/playlist_files", folder}),
       ]);
       if (revision !== this._eventRevision) {
         this._eventMessage("Eingaben geändert; bitte Ordner erneut laden.", true);
-        return;
+        return false;
       }
       this.shadowRoot.querySelector("#event-folder").value = folder;
-      const subfolder = this.shadowRoot.querySelector("#event-subfolder");
-      subfolder.replaceChildren(new Option("Unterordner auswählen", ""));
-      subfolders.forEach((value) => subfolder.add(new Option(value.split("/").pop(), value)));
+      this._eventTree.select(folder);
       this._eventFiles = files.map((item) => item.file);
       this._eventFolderReady = true;
       const list = this.shadowRoot.querySelector("#event-list");
@@ -1324,8 +1456,10 @@ class DivoomOrchestratorPanel extends HTMLElement {
       }
       this._eventMessage(`${files.length} GIF(s) im Ordner gefunden.`);
       this._eventPreviews(folder, Array.from(list.children));
+      return true;
     } catch (error) {
       this._eventMessage(`Ordner konnte nicht geladen werden: ${error.message || String(error)}`, true);
+      return false;
     } finally {
       this._eventLoading = false;
     }
