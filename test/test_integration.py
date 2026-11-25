@@ -171,6 +171,8 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         sys.modules.pop("test_divoom_orchestrator.playlist_ha", None)
         sys.modules.pop("test_divoom_orchestrator.events_ha", None)
         sys.modules.pop("test_divoom_orchestrator.gif_preview", None)
+        sys.modules.pop("test_divoom_orchestrator.community", None)
+        sys.modules.pop("test_divoom_orchestrator.community_ha", None)
         sys.modules.pop("test_divoom_orchestrator.rotation_ha", None)
         sys.modules.pop("test_divoom_orchestrator.text_ha", None)
 
@@ -189,6 +191,36 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.hass.services.handlers["divoom_orchestrator", "stop"](types.SimpleNamespace(data={}))
         self.assertEqual(len(self.hass.services.calls), 1)
+
+    async def test_community_preview_and_import_are_restricted_to_search_results(self):
+        community_ha = sys.modules["test_divoom_orchestrator.community_ha"]
+        connection = types.SimpleNamespace(send_result=unittest.mock.Mock(), send_error=unittest.mock.Mock())
+        works = [
+            {"id": 42, "title": "Art", "author": "Artist", "importable": True},
+            {"id": 43, "title": "Restricted", "author": "Artist", "importable": False},
+        ]
+        with patch.object(community_ha.community, "search", return_value={"works": works, "has_more": False}), \
+                patch.object(community_ha.community, "render", return_value=b"GIF"):
+            await community_ha.websocket_search(
+                self.hass, connection, {"id": 1, "query": "cat", "page": 1, "sort": 1}
+            )
+            search_id = connection.send_result.call_args.args[1]["search_id"]
+            await community_ha.websocket_preview(
+                self.hass, connection, {"id": 2, "search_id": search_id, "gallery_id": 43}
+            )
+            self.assertEqual(connection.send_error.call_args.args[1], "community_preview_failed")
+            await community_ha.websocket_preview(
+                self.hass, connection, {"id": 3, "search_id": search_id, "gallery_id": 42}
+            )
+            self.assertEqual(connection.send_result.call_args.args[1]["data"], "R0lG")
+            message = {"id": 4, "search_id": search_id, "gallery_id": 42, "folder": "rain"}
+            await community_ha.websocket_import(self.hass, connection, message)
+            self.assertEqual(connection.send_result.call_args.args[1]["file"], "rain/divoom-42.gif")
+            await community_ha.websocket_import(self.hass, connection, message)
+            self.assertEqual(connection.send_error.call_args.args[1], "already_exists")
+            message["search_id"] = "not-a-search"
+            await community_ha.websocket_import(self.hass, connection, message)
+            self.assertEqual(connection.send_error.call_args.args[1], "community_import_failed")
 
     async def test_rotation_cycle_snapshots_start_and_active_dates(self):
         data = self.hass.data["divoom_orchestrator"]

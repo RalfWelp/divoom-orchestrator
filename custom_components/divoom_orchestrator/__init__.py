@@ -22,6 +22,7 @@ from .playlist_ha import PlaylistDurations, register as register_playlist
 from .events_ha import EventStore, register as register_events
 from .rotation_ha import RotationRuntime, register as register_rotation
 from .text_ha import TextRuntime
+from .community_ha import register as register_community
 
 DOMAIN = "divoom_orchestrator"
 _LOGGER = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     register_playlist(hass)
     register_events(hass)
     register_rotation(hass)
+    register_community(hass)
 
     def controller() -> PlaylistController:
         instance = hass.data[DOMAIN].get("controller")

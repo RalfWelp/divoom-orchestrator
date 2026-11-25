@@ -29,6 +29,18 @@
           if (request.folder === "date_events") return ["date_events/sylvester", "date_events/weihnachten"];
           return [];
         }
+        if (request.type === "divoom_orchestrator/community_search") {
+          return {search_id: "fixture", has_more: request.page === 1, works: request.page === 1 ? [
+            {id: 42, title: "Testbild", author: "Testautor", importable: true},
+            {id: 43, title: "Geschützt", author: "Testautor", importable: false},
+          ] : []};
+        }
+        if (request.type === "divoom_orchestrator/community_preview") {
+          return {data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"};
+        }
+        if (request.type === "divoom_orchestrator/community_import") {
+          return {file: `${request.folder === "." ? "" : `${request.folder}/`}divoom-${request.gallery_id}.gif`};
+        }
         if (request.type === "divoom_orchestrator/events") return events;
         if (request.type === "divoom_orchestrator/holiday_names") return ["Ostersonntag", "Weihnachten"];
         if (request.type === "divoom_orchestrator/rotation") return null;

@@ -36,9 +36,9 @@ Start einer Playlist geprüft.
 ## Oberfläche
 
 Nach der Einrichtung erscheint für Administratoren **Divoom Orchestrator** in
-der Seitenleiste. Das Panel hat drei Bereiche: **Übersicht & Rotation**
+der Seitenleiste. Das Panel hat vier Bereiche: **Übersicht & Rotation**
 (inklusive Bluetooth-Status des ausgewählten HA-Sensors und Ordner-Playlist),
-**Event-Editor** und **Einstellungen**. Die Ordner-Playlist ist als
+**Event-Editor**, **Divoom Community** und **Einstellungen**. Die Ordner-Playlist ist als
 Übergangslösung einklappbar; ihr Ordner wird von Hand eingegeben und nicht
 dauerhaft gespeichert. Mit **GIFs laden / aktualisieren** werden die
 Dateien des Ordners aufgelistet; für jede gewünschte Animation lässt sich eine
@@ -66,6 +66,24 @@ Der angezeigte Verbindungsstatus stammt aus der konfigurierten MQTT-Entität,
 nicht direkt vom Pixoo. Ein Live-Test des Event-Editors in Home Assistant steht noch aus.
 Das Panel übernimmt das helle oder dunkle Home-Assistant-Theme; es ändert
 keine globalen Theme-Einstellungen.
+
+### Divoom Community
+
+Hier lassen sich 16×16-Werke anonym nach Begriff und Sortierung suchen und
+als animierte Vorschau betrachten. Der Suchbegriff wird an Divoom übermittelt.
+Im Zielordnerbrowser einen vorhandenen Ordner unter `/config/pixelart` wählen
+und ein einzelnes Werk als GIF speichern. Dafür benötigt Home Assistant
+Schreibzugriff; bestehende `divoom-<ID>.gif`-Dateien werden nicht überschrieben.
+Titel und Urheber erscheinen in der Ergebnisliste. Bitte die Rechte der
+Urheber und Divooms Nutzungsbedingungen beachten. Privat, verborgen oder
+als urheberrechtlich eingeschränkt gekennzeichnete Werke werden nicht importiert.
+
+Die Divoom-Cloud-Schnittstelle ist inoffiziell, kann sich ändern und begrenzt
+Anfragen und anonyme Ergebnisse. Nicht alle Formate lassen sich über die
+Schnittstelle als 16×16-GIF abrufen; betroffene Vorschauen melden einen Fehler.
+Ein Abruf kann nach Erreichen des Anfragelimits vorübergehend fehlschlagen.
+GIF speichert Framezeiten in 10-ms-Schritten; die Wiedergabe kann daher leicht
+von der Divoom-Vorschau abweichen.
 
 ### Event-Editor
 

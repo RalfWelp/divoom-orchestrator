@@ -87,6 +87,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .rotation-toggle { display:flex; flex:none; align-items:center; gap:6px; margin:0; font-size:13px; font-weight:normal; }
         .rotation-toggle input { width:auto; margin:0; accent-color:var(--primary-color,#16889a); }
         .rotation-edit { flex:none; width:40px; height:40px; padding:0; font-size:20px; }
+        .community-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-top:18px; }
+        .community-item { min-width:0; padding:10px; border:1px solid var(--panel-divider); border-radius:10px; background:var(--panel-secondary); }
+        .community-item img { display:block; width:100%; aspect-ratio:1; object-fit:contain; image-rendering:pixelated; background:#111; border-radius:6px; }
+        .community-item strong, .community-item small { display:block; overflow-wrap:anywhere; margin-top:6px; }
+        .community-item small { color:var(--panel-muted); }
+        .community-item button { width:100%; margin-top:10px; }
+        .community-item .error { font-size:13px; }
         .rotation-block:has(.rotation-toggle input:not(:checked)) .rotation-description { opacity:.65; }
         dialog.rotation-dialog { width:min(680px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:1px solid var(--panel-divider); border-radius:16px; padding:24px; background:var(--panel-card); color:var(--panel-text); box-shadow:0 12px 40px #0006; }
         dialog.rotation-dialog::backdrop { background:#0009; }
@@ -101,8 +108,26 @@ class DivoomOrchestratorPanel extends HTMLElement {
         <nav class="navigation" aria-label="Orchestrator-Bereiche">
           <button type="button" class="secondary" data-page="overview" aria-current="page">Übersicht &amp; Rotation</button>
           <button type="button" class="secondary" data-page="events">Event-Editor</button>
+          <button type="button" class="secondary" data-page="community">Divoom Community</button>
           <button type="button" class="secondary" data-page="settings">Einstellungen</button>
         </nav>
+        <div id="page-community" class="grid" hidden>
+          <section class="card wide">
+            <h3>Divoom Community</h3>
+            <p class="muted">16×16-Pixelart suchen und einzeln als GIF in einen bestehenden Ordner speichern. Beachte die Rechte der Urheber und Divooms Nutzungsbedingungen.</p>
+            <form id="community-search">
+              <label>Suchbegriff<input name="query" maxlength="100" required autocomplete="off"></label>
+              <label>Sortierung<select name="sort"><option value="1">Beliebt</option><option value="0">Neueste</option></select></label>
+              <div class="actions"><button type="submit" class="primary">Suchen</button></div>
+            </form>
+            <label>Zielordner unter pixelart<input id="community-folder" value="." readonly></label>
+            <label>Unterordner<select id="community-subfolder"><option value="">Kein Unterordner</option></select></label>
+            <div class="actions"><button type="button" class="secondary" id="community-up">⬆ Überordner</button><button type="button" class="secondary" id="community-open">Ordner öffnen</button></div>
+            <p id="community-message" class="message" role="status" aria-live="polite"></p>
+            <div id="community-results" class="community-grid"></div>
+            <div class="actions"><button type="button" class="secondary" id="community-prev" disabled>Zurück</button><span id="community-page"></span><button type="button" class="secondary" id="community-next" disabled>Weiter</button></div>
+          </section>
+        </div>
         <div id="page-events" class="grid" hidden>
           <section class="card wide">
             <h3>Event-Editor</h3>
@@ -341,6 +366,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this.shadowRoot.querySelector("#load-gifs").addEventListener("click", () => this._loadGifs());
     this.shadowRoot.querySelector("#save-gifs").addEventListener("click", () => this._saveGifs());
     this._initEvents();
+    this._initCommunity();
     const brightness = this.shadowRoot.querySelector("#brightness");
     brightness.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -368,12 +394,142 @@ class DivoomOrchestratorPanel extends HTMLElement {
   }
 
   _showPage(page) {
-    for (const name of ["overview", "events", "settings"]) {
+    for (const name of ["overview", "events", "community", "settings"]) {
       this.shadowRoot.querySelector(`#page-${name}`).hidden = name !== page;
       const button = this.shadowRoot.querySelector(`[data-page="${name}"]`);
       if (name === page) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     }
+  }
+
+  _initCommunity() {
+    const root = this.shadowRoot;
+    const form = root.querySelector("#community-search");
+    const folder = root.querySelector("#community-folder");
+    const subfolder = root.querySelector("#community-subfolder");
+    const message = root.querySelector("#community-message");
+    const results = root.querySelector("#community-results");
+    const prev = root.querySelector("#community-prev");
+    const next = root.querySelector("#community-next");
+    let revision = 0;
+    let currentPage = 1;
+    let currentQuery = "";
+    let currentSort = 1;
+    let folderReady = false;
+    let folderRevision = 0;
+    const report = (text, error = false) => {
+      message.textContent = text;
+      message.classList.toggle("error", error);
+    };
+    const loadFolder = async (value) => {
+      const requestRevision = ++folderRevision;
+      folderReady = false;
+      try {
+        const children = await this._hass.callWS({type: "divoom_orchestrator/event_folders", folder: value});
+        if (requestRevision !== folderRevision) return;
+        folder.value = value;
+        subfolder.replaceChildren(new Option("Kein Unterordner", ""));
+        children.forEach((child) => subfolder.add(new Option(child.split("/").pop(), child)));
+        folderReady = true;
+        report(`Zielordner: ${value}`);
+      } catch (error) {
+        if (requestRevision === folderRevision) report(`Ordner konnte nicht geladen werden: ${error.message || String(error)}`, true);
+      }
+    };
+    root.querySelector("#community-open").addEventListener("click", () => {
+      if (subfolder.value) loadFolder(subfolder.value);
+    });
+    root.querySelector("#community-up").addEventListener("click", () => {
+      const parts = folder.value.split("/");
+      parts.pop();
+      loadFolder(parts.join("/") || ".");
+    });
+    const loadPage = async (page) => {
+      const requestRevision = ++revision;
+      prev.disabled = next.disabled = true;
+      results.replaceChildren();
+      report("Community-Ergebnisse werden geladen …");
+      try {
+        const search = await this._hass.callWS({
+          type: "divoom_orchestrator/community_search", query: currentQuery, page, sort: currentSort,
+        });
+        if (requestRevision !== revision) return;
+        const works = search.works;
+        currentPage = page;
+        root.querySelector("#community-page").textContent = `Seite ${page}`;
+        prev.disabled = page <= 1;
+        next.disabled = !search.has_more || page >= 100;
+        report(works.length ? `${works.length} Ergebnisse. Vorschauen werden geladen …`
+          : search.has_more ? "Keine sichtbaren Ergebnisse auf dieser Seite." : "Keine weiteren Ergebnisse.");
+        const previews = [];
+        for (const work of works) {
+          const card = document.createElement("article");
+          card.className = "community-item";
+          const image = document.createElement("img");
+          image.alt = `Vorschau: ${work.title}`;
+          const title = document.createElement("strong");
+          title.textContent = work.title || `Werk ${work.id}`;
+          const author = document.createElement("small");
+          author.textContent = work.author ? `von ${work.author}` : "Urheber unbekannt";
+          const status = document.createElement("small");
+          const save = document.createElement("button");
+          save.type = "button";
+          save.className = "primary";
+          save.textContent = "Als GIF speichern";
+          save.disabled = true;
+          card.append(image, title, author, status, save);
+          results.append(card);
+          if (!work.importable) {
+            status.textContent = "Durch Rechtekennzeichnung nicht verfügbar.";
+            continue;
+          }
+          status.textContent = "Vorschau wird geladen …";
+          save.addEventListener("click", async () => {
+            if (!folderReady) return report("Bitte zuerst einen Zielordner laden.", true);
+            save.disabled = true;
+            try {
+              const saved = await this._hass.callWS({
+                type: "divoom_orchestrator/community_import", search_id: search.search_id, gallery_id: work.id, folder: folder.value,
+              });
+              report(`Gespeichert: ${saved.file}`);
+            } catch (error) {
+              report(`Import fehlgeschlagen: ${error.message || String(error)}`, true);
+            } finally {
+              save.disabled = false;
+            }
+          });
+          previews.push({work, image, status, save});
+        }
+        for (const item of previews) {
+          if (requestRevision !== revision) return;
+          try {
+            const preview = await this._hass.callWS({
+              type: "divoom_orchestrator/community_preview", search_id: search.search_id, gallery_id: item.work.id,
+            });
+            if (requestRevision !== revision) return;
+            item.image.src = `data:image/gif;base64,${preview.data}`;
+            item.status.textContent = "";
+            item.save.disabled = false;
+          } catch (error) {
+            item.status.textContent = `Vorschau nicht verfügbar: ${error.message || String(error)}`;
+            item.status.classList.add("error");
+          }
+        }
+        if (requestRevision === revision && works.length) report(`${works.length} Ergebnisse auf Seite ${page}.`);
+      } catch (error) {
+        if (requestRevision === revision) report(`Suche fehlgeschlagen: ${error.message || String(error)}`, true);
+      }
+    };
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      currentQuery = form.elements.query.value.trim();
+      if (!currentQuery) return report("Bitte einen Suchbegriff eingeben.", true);
+      currentSort = Number(form.elements.sort.value);
+      loadPage(1);
+    });
+    prev.addEventListener("click", () => loadPage(currentPage - 1));
+    next.addEventListener("click", () => loadPage(currentPage + 1));
+    loadFolder(".");
   }
 
   _rotationMessage(text, error = false) {
