@@ -10,7 +10,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from PIL import Image
 
 API = "https://app.divoom-gz.com/"
-PAGE_SIZE = 9
+PAGE_SIZE = 18
+MAX_SEARCH_RESULTS = 100
 MAX_RESPONSE = 2 * 1024 * 1024
 MAX_FRAMES = 100
 
@@ -55,20 +56,22 @@ def request(command: str, payload: dict) -> dict:
 
 def search(query: str, page: int, sort: int) -> dict:
     """Search public 16x16 works; retain explicit visibility and rights flags."""
-    if not query.strip() or len(query) > 100 or not 1 <= page <= 100 or sort not in (0, 1):
+    if (not query.strip() or len(query) > 100
+            or not 1 <= page <= (MAX_SEARCH_RESULTS + PAGE_SIZE - 1) // PAGE_SIZE
+            or sort not in (0, 1)):
         raise ValueError("Ungültige Suche")
-    start = (page - 1) * PAGE_SIZE + 1
+    end = min(page * PAGE_SIZE, MAX_SEARCH_RESULTS)
     result = request("SearchGalleryV3", {
         "Keywords": query.strip(), "KeywordsEn": query.strip(), "FileSize": 1,
         "FileType": 5, "FileSort": sort, "Classify": 1,
-        "StartNum": start, "EndNum": start + PAGE_SIZE - 1,
+        "StartNum": 1, "EndNum": end,
         "Version": 19, "RefreshIndex": 0,
     })
     records = result.get("FileList")
-    if not isinstance(records, list) or len(records) > PAGE_SIZE:
+    if not isinstance(records, list) or len(records) > end:
         raise ValueError("Ungültige Divoom-Ergebnisliste")
     works = []
-    for record in records:
+    for record in records[(page - 1) * PAGE_SIZE:end]:
         if not isinstance(record, dict):
             raise ValueError("Ungültiger Divoom-Eintrag")
         gallery_id = record.get("GalleryId")
@@ -83,7 +86,7 @@ def search(query: str, page: int, sort: int) -> dict:
             "id": gallery_id, "title": title.strip()[:200], "author": author.strip()[:200],
             "importable": record.get("CopyrightFlag") == 0,
         })
-    return {"works": works, "has_more": len(records) == PAGE_SIZE}
+    return {"works": works, "has_more": len(records) == end and end < MAX_SEARCH_RESULTS}
 
 
 def render(gallery_id: int) -> bytes:

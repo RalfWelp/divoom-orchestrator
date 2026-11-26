@@ -9,6 +9,11 @@
     import "../custom_components/divoom_orchestrator/frontend/panel.js";
     const panel = document.createElement("divoom-orchestrator-panel");
     const events = {};
+    const folders = new Set([".", "bewegung", "date_events", "date_events/sylvester",
+      "date_events/weihnachten", "klingel", "rotation", "wetter"]);
+    const gifs = new Map(Array.from(folders, (folder) => [folder, ["cloudy.gif", "new.gif"]]));
+    const join = (folder, name) => folder === "." ? name : `${folder}/${name}`;
+    const parent = (path) => path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";
     panel.hass = {
       themes: {darkMode: true},
       states: {
@@ -18,16 +23,47 @@
       callWS: async (request) => {
         document.querySelector("#calls").textContent = JSON.stringify(request);
         if (request.type === "divoom_orchestrator/playlist_files") {
-          const prefix = request.folder === "." ? "" : `${request.folder}/`;
-          return [{file: `${prefix}cloudy.gif`, duration: 12}, {file: `${prefix}new.gif`, duration: null}];
+          if (!folders.has(request.folder)) throw new Error("Ordner nicht gefunden");
+          return gifs.get(request.folder).map((name) => ({file: join(request.folder, name), duration: null}));
         }
         if (request.type === "divoom_orchestrator/gif_preview") {
           return {data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", cycle_seconds: 1.5};
         }
         if (request.type === "divoom_orchestrator/event_folders") {
-          if (request.folder === ".") return ["bewegung", "date_events", "klingel", "rotation", "wetter"];
-          if (request.folder === "date_events") return ["date_events/sylvester", "date_events/weihnachten"];
-          return [];
+          if (!folders.has(request.folder)) throw new Error("Ordner nicht gefunden");
+          return Array.from(folders).filter((folder) => folder !== "." && parent(folder) === request.folder).sort();
+        }
+        if (request.type === "divoom_orchestrator/media_create") {
+          const target = join(request.parent, request.name);
+          if (!request.name || request.name.includes("/") || folders.has(target)) throw new Error("Ordner existiert oder Name ungültig");
+          folders.add(target); gifs.set(target, []); return target;
+        }
+        if (request.type === "divoom_orchestrator/media_duplicate") {
+          const target = join(request.parent, request.name);
+          if (folders.has(target)) throw new Error("Ordner existiert");
+          for (const old of Array.from(folders).filter((item) => item === request.source || item.startsWith(`${request.source}/`))) {
+            const copy = target + old.slice(request.source.length);
+            folders.add(copy); gifs.set(copy, [...gifs.get(old)]);
+          }
+          return target;
+        }
+        if (request.type === "divoom_orchestrator/media_mutate") {
+          if (request.kind === "gif") {
+            const from = parent(request.source), name = request.source.split("/").pop();
+            if (request.action === "move") {
+              if (gifs.get(request.parent).includes(name)) throw new Error("GIF existiert");
+              gifs.get(request.parent).push(name);
+            }
+            gifs.set(from, gifs.get(from).filter((item) => item !== name));
+          } else {
+            const target = request.action === "move" ? join(request.parent, request.source.split("/").pop()) : null;
+            if (target && folders.has(target)) throw new Error("Ordner existiert");
+            for (const old of Array.from(folders).filter((item) => item === request.source || item.startsWith(`${request.source}/`))) {
+              if (target) { const moved = target + old.slice(request.source.length); folders.add(moved); gifs.set(moved, gifs.get(old)); }
+              folders.delete(old); gifs.delete(old);
+            }
+          }
+          return null;
         }
         if (request.type === "divoom_orchestrator/community_search") {
           return {search_id: "fixture", has_more: request.page === 1, works: request.page === 1 ? [
@@ -59,6 +95,7 @@
         document.querySelector("#calls").textContent = JSON.stringify({domain, action, data});
         if (document.querySelector("#failure").textContent) throw new Error("Testfehler");
       },
+      callApi: async (method, path) => path === "events" ? [{event: "state_changed"}, {event: "klingel"}] : [],
     };
     panel.addEventListener("hass-toggle-menu", () => {
       document.querySelector("#menu-event").textContent = "opened";

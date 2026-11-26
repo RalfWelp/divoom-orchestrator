@@ -23,7 +23,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
         :host { --panel-text:var(--primary-text-color,#202124); --panel-background:var(--primary-background-color,#f3f5f7); --panel-card:var(--card-background-color,#fff); --panel-secondary:var(--secondary-background-color,#e8eef0); --panel-muted:var(--secondary-text-color,#63717c); --panel-divider:var(--divider-color,#c7cdd2); display:block; min-height:100%; color:var(--panel-text); background:var(--panel-background); font-family:var(--paper-font-body1_-_font-family,Roboto,Arial,sans-serif); color-scheme:light; }
         :host([data-dark]) { --panel-text:var(--primary-text-color,#e8edf2); --panel-background:var(--primary-background-color,#111820); --panel-card:var(--card-background-color,#1d2731); --panel-secondary:var(--secondary-background-color,#283743); --panel-muted:var(--secondary-text-color,#b0bdc7); --panel-divider:var(--divider-color,#475764); color-scheme:dark; }
         * { box-sizing:border-box; }
-        header { padding:18px 24px; background:var(--app-header-background-color,var(--panel-card)); color:var(--app-header-text-color,var(--panel-text)); box-shadow:0 2px 6px #0001; display:flex; gap:16px; align-items:center; }
+        header { height:var(--header-height,56px); padding:0 16px; background:var(--app-header-background-color,var(--panel-card)); color:var(--app-header-text-color,var(--panel-text)); box-shadow:0 2px 6px #0001; display:flex; gap:16px; align-items:center; }
         header button { font-size:22px; background:none; padding:2px 6px; color:inherit; }
         h1 { margin:0; font-size:21px; font-weight:500; }
         main { max-width:1100px; margin:auto; padding:28px 20px; }
@@ -35,8 +35,8 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:20px; }
         .card { background:var(--panel-card); border-radius:16px; padding:22px; box-shadow:0 2px 12px #0001; }
         h3 { margin:0 0 8px; font-size:18px; } .muted { color:var(--panel-muted); font-size:14px; }
-        .connection-card { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:12px 22px; }
-        .connection-card h3, .connection-card p { margin:0; }
+        .hero-connection { display:flex; align-items:center; gap:6px; margin-top:6px; font-size:14px; }
+        .hero-connection p { margin:0; }
         label { display:block; margin-top:17px; font-size:14px; font-weight:600; }
         input,select { width:100%; margin-top:7px; padding:11px; border:1px solid var(--panel-divider); border-radius:8px; background:var(--panel-card); color:var(--panel-text); font:inherit; }
         input[type=checkbox] { width:auto; margin-right:8px; }
@@ -74,9 +74,23 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .event-layout { display:grid; grid-template-columns:230px minmax(0,1fr); gap:20px; }
         .event-sidebar { background:var(--panel-secondary); border-radius:12px; padding:14px; align-self:start; }
         .event-sidebar h4 { margin:12px 0 6px; font-size:14px; }
-        .event-sidebar button { width:100%; text-align:left; margin:2px 0; overflow-wrap:anywhere; }
+        .event-sidebar button { width:100%; text-align:left; margin:1px 0; padding:6px 9px; overflow-wrap:anywhere; }
         .event-sidebar button[aria-current="true"] { background:var(--primary-color,#16889a); color:white; }
         .event-sidebar .new-event { color:var(--primary-color,#16889a); background:transparent; }
+        .event-editor-content { display:grid; gap:14px; }
+        .event-fields, .event-gifs { padding:14px; border:1px solid var(--panel-divider); border-radius:10px; }
+        .event-fields label { margin-top:10px; }
+        .event-fields input, .event-fields select { margin-top:4px; padding:8px; }
+        .event-fields input[type=checkbox] { width:auto; }
+        .event-compact { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr)); gap:0 12px; align-items:end; }
+        .media-layout { display:grid; grid-template-columns:minmax(200px,270px) minmax(0,1fr); gap:18px; }
+        .media-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .media-toolbar button:disabled { cursor:not-allowed; }
+        .media-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; margin-top:12px; }
+        .media-item { min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; background:var(--panel-secondary); color:var(--panel-text); padding:10px; overflow-wrap:anywhere; }
+        .media-item[aria-pressed="true"] { outline:3px solid var(--primary-color,#16889a); }
+        .media-item img, .media-item > ha-icon { width:64px; height:64px; object-fit:contain; image-rendering:pixelated; }
+        .media-item small { color:var(--panel-muted); font-weight:normal; }
         .rotation-preview { list-style:none; margin:18px 0 0; padding:0; display:grid; gap:10px; }
         .rotation-block { display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--panel-divider); border-radius:12px; background:var(--panel-secondary); }
         .rotation-icon { display:grid; place-items:center; width:42px; height:42px; flex:none; border-radius:10px; background:var(--panel-card); font-size:21px; }
@@ -87,7 +101,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .rotation-toggle { display:flex; flex:none; align-items:center; gap:6px; margin:0; font-size:13px; font-weight:normal; }
         .rotation-toggle input { width:auto; margin:0; accent-color:var(--primary-color,#16889a); }
         .rotation-edit { flex:none; width:40px; height:40px; padding:0; font-size:20px; }
-        .community-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-top:18px; }
+        .community-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:12px; margin-top:18px; }
         .community-item { min-width:0; padding:10px; border:1px solid var(--panel-divider); border-radius:10px; background:var(--panel-secondary); }
         .community-item img { display:block; width:100%; aspect-ratio:1; object-fit:contain; image-rendering:pixelated; background:#111; border-radius:6px; }
         .community-item strong, .community-item small { display:block; overflow-wrap:anywhere; margin-top:6px; }
@@ -95,6 +109,12 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .community-item button { width:100%; margin-top:10px; }
         .community-item .error { font-size:13px; }
         .folder-browser { margin-top:17px; }
+        .folder-field { display:flex; align-items:end; gap:8px; }
+        .folder-field label { flex:1; min-width:0; }
+        .icon-button { display:grid; place-items:center; width:44px; height:44px; padding:0; flex:none; }
+        #community-search { display:flex; flex-wrap:wrap; align-items:end; gap:10px; }
+        #community-search label { margin-top:0; }
+        #community-search label:first-child { flex:1; min-width:150px; }
         .folder-browser-title { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:14px; font-weight:600; }
         .folder-refresh { display:grid; place-items:center; width:36px; height:36px; padding:0; }
         .folder-tree { max-height:270px; overflow:auto; margin-top:6px; padding:8px; border:1px solid var(--panel-divider); border-radius:10px; background:var(--panel-secondary); }
@@ -111,17 +131,20 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .rotation-block:has(.rotation-toggle input:not(:checked)) .rotation-description { opacity:.65; }
         dialog.rotation-dialog { width:min(680px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:1px solid var(--panel-divider); border-radius:16px; padding:24px; background:var(--panel-card); color:var(--panel-text); box-shadow:0 12px 40px #0006; }
         dialog.rotation-dialog::backdrop { background:#0009; }
-        @media (max-width:700px) { .event-layout { grid-template-columns:1fr; } .rotation-block { flex-wrap:wrap; } }
+        @media (max-width:700px) { .event-layout, .media-layout { grid-template-columns:1fr; } .rotation-block { flex-wrap:wrap; } }
       </style>
       <header><button id="menu" aria-label="Menü öffnen">☰</button><h1>Divoom Orchestrator</h1></header>
       <main>
         <section class="hero"><div class="eyebrow">Deine Smart Doorbell</div>
           <h2>Animationen für deinen Pixoo</h2>
           <p>Rotation, Events und Einstellungen für dein Display.</p>
+          <div class="hero-connection"><ha-icon icon="mdi:bluetooth" aria-hidden="true"></ha-icon><p id="connection-status" role="status" title="Der Status stammt vom in den Einstellungen gewählten HA-Sensor, nicht direkt vom Pixoo.">Status wird geladen …</p></div>
         </section>
         <nav class="navigation" aria-label="Orchestrator-Bereiche">
           <button type="button" class="secondary" data-page="overview" aria-current="page">Übersicht &amp; Rotation</button>
-          <button type="button" class="secondary" data-page="events">Event-Editor</button>
+          <button type="button" class="secondary" data-page="trigger-events">Triggered-Events</button>
+          <button type="button" class="secondary" data-page="date-events">Datums-Events</button>
+          <button type="button" class="secondary" data-page="media">Ordnerverwaltung</button>
           <button type="button" class="secondary" data-page="community">Divoom Community</button>
           <button type="button" class="secondary" data-page="settings">Einstellungen</button>
         </nav>
@@ -132,60 +155,89 @@ class DivoomOrchestratorPanel extends HTMLElement {
             <form id="community-search">
               <label>Suchbegriff<input name="query" maxlength="100" required autocomplete="off"></label>
               <label>Sortierung<select name="sort"><option value="1">Beliebt</option><option value="0">Neueste</option></select></label>
-              <div class="actions"><button type="submit" class="primary">Suchen</button></div>
+              <button type="submit" class="primary icon-button" aria-label="Suchen" title="Suchen"><ha-icon icon="mdi:magnify" aria-hidden="true"></ha-icon></button>
             </form>
-            <label>Zielordner unter pixelart<input id="community-folder" value="." readonly></label>
-            <div class="folder-browser">
+            <div class="folder-field"><label>Zielordner unter pixelart<input id="community-folder" value="." readonly></label><button type="button" class="secondary icon-button" id="community-tree-open" aria-label="Zielordner auswählen" title="Zielordner auswählen"><ha-icon icon="mdi:folder-open" aria-hidden="true"></ha-icon></button></div>
+            <dialog id="community-tree-dialog" class="rotation-dialog" aria-label="Zielordner auswählen">
               <div class="folder-browser-title"><span>Ordner auswählen</span><button type="button" class="secondary folder-refresh" id="community-tree-refresh" aria-label="Community-Ordnerbaum aktualisieren" title="Ordnerbaum aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button></div>
               <div class="folder-tree" id="community-tree" aria-label="Community-Zielordner"></div>
-            </div>
+              <div class="actions"><button type="button" class="secondary" id="community-tree-close">Fertig</button></div>
+            </dialog>
             <p id="community-message" class="message" role="status" aria-live="polite"></p>
             <div id="community-results" class="community-grid"></div>
             <div class="actions"><button type="button" class="secondary" id="community-prev" disabled>Zurück</button><span id="community-page"></span><button type="button" class="secondary" id="community-next" disabled>Weiter</button></div>
           </section>
         </div>
+        <div id="page-media" class="grid" hidden>
+          <section class="card wide">
+            <h3>Ordnerverwaltung</h3>
+            <div class="media-layout">
+              <div><strong>Ordner</strong><div class="folder-tree" id="media-tree" aria-label="Ordnerstruktur"></div></div>
+              <div>
+                <div class="media-toolbar" aria-label="Ordneraktionen">
+                  <button type="button" class="secondary icon-button" id="media-create" title="Unterordner erstellen" aria-label="Unterordner erstellen"><ha-icon icon="mdi:folder-plus" aria-hidden="true"></ha-icon></button>
+                  <button type="button" class="secondary icon-button" id="media-duplicate" title="Ordner duplizieren" aria-label="Ordner duplizieren"><ha-icon icon="mdi:content-copy" aria-hidden="true"></ha-icon></button>
+                  <button type="button" class="secondary icon-button" id="media-move" title="Auswahl verschieben" aria-label="Auswahl verschieben"><ha-icon icon="mdi:folder-move" aria-hidden="true"></ha-icon></button>
+                  <button type="button" class="secondary icon-button" id="media-delete" title="Auswahl löschen" aria-label="Auswahl löschen"><ha-icon icon="mdi:delete" aria-hidden="true"></ha-icon></button>
+                  <button type="button" class="secondary icon-button" id="media-refresh" title="Ansicht aktualisieren" aria-label="Ansicht aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button>
+                </div>
+                <p id="media-path" class="muted"></p>
+                <p id="media-message" class="message" role="status" aria-live="polite"></p>
+                <div id="media-items" class="media-grid" aria-label="Ordnerinhalt"></div>
+              </div>
+            </div>
+            <dialog id="media-destination" class="rotation-dialog" aria-labelledby="media-destination-title">
+              <h3 id="media-destination-title">Zielordner auswählen</h3>
+              <p id="media-destination-path" class="muted"></p>
+              <div id="media-destination-tree" class="folder-tree" aria-label="Zielordner"></div>
+              <label id="media-copy-name-group"><span id="media-name-label">Name der Kopie</span><input id="media-copy-name" autocomplete="off"></label>
+              <p id="media-destination-message" class="message" role="status" aria-live="polite"></p>
+              <div class="actions"><button type="button" class="primary" id="media-destination-confirm">Ausführen</button><button type="button" class="secondary" id="media-destination-cancel">Abbrechen</button></div>
+            </dialog>
+          </section>
+        </div>
         <div id="page-events" class="grid" hidden>
           <section class="card wide">
-            <h3>Event-Editor</h3>
-            <p class="muted">GIFs auswählen und sortieren. Triggered-Events benötigen die aktivierte Helligkeitsautomatik und unterbrechen die Rotation nach ihrer Priorität.</p>
+            <h3 id="events-title">Triggered-Events</h3>
             <div class="event-layout">
             <aside class="event-sidebar" aria-label="Events">
-              <h4>⚡ Triggered-Events</h4>
-              <div id="events-trigger"></div>
-              <button type="button" class="new-event" data-new-event="trigger">+ Neues Triggered-Event</button>
-              <h4>📅 Datums-Events</h4>
-              <div id="events-date"></div>
-              <button type="button" class="new-event" data-new-event="date">+ Neues Datums-Event</button>
+              <div id="events-trigger-group"><h4>⚡ Triggered-Events</h4>
+                <div id="events-trigger"></div>
+                <button type="button" class="new-event" data-new-event="trigger" aria-label="Neues Triggered-Event" title="Neues Triggered-Event"><ha-icon icon="mdi:plus" aria-hidden="true"></ha-icon></button></div>
+              <div id="events-date-group" hidden><h4>📅 Datums-Events</h4>
+                <div id="events-date"></div>
+                <button type="button" class="new-event" data-new-event="date" aria-label="Neues Datums-Event" title="Neues Datums-Event"><ha-icon icon="mdi:plus" aria-hidden="true"></ha-icon></button></div>
             </aside>
             <div>
-            <div class="grid">
-              <div>
+            <div class="event-editor-content">
+              <div class="event-fields">
                 <select id="event-choice" hidden aria-label="Gespeichertes Event"><option value="">Neues Event</option></select>
-                <p id="event-kind" class="muted"></p>
+                <span id="event-kind" hidden></span>
+                <div class="event-compact">
                 <label>Eventname<input id="event-name" maxlength="80" autocomplete="off" placeholder="z. B. Klingel"></label>
                 <label><input id="event-enabled" type="checkbox" checked>Event aktiviert</label>
-                <div id="event-priority-group">
-                  <label>Priorität<input id="event-priority" type="number" min="1" max="100" step="1" value="3" required></label>
-                  <p class="muted">1 ist die höchste Priorität. Ein wichtigeres Event kann ein laufendes unterbrechen.</p>
-                  <label><input id="event-cooldown-enabled" type="checkbox">Abklingzeit</label>
-                  <label>Abklingzeit (Sekunden)<input id="event-cooldown-seconds" type="number" min="0.01" step="any" disabled></label>
-                  <p class="muted">Gilt ab Beginn für automatische Auslöser und HA-Aktionen; der Testknopf ist ausgenommen.</p>
+                </div>
+                <div id="event-priority-group" title="Triggered-Events benötigen die aktivierte Helligkeitsautomatik.">
+                  <div class="event-compact">
+                  <label title="1 ist die höchste Priorität. Ein wichtigeres Event kann ein laufendes unterbrechen.">Priorität<input id="event-priority" type="number" min="1" max="100" step="1" value="3" required></label>
+                  <label title="Gilt ab Beginn für automatische Auslöser und HA-Aktionen; der Testknopf ist ausgenommen."><input id="event-cooldown-enabled" type="checkbox">Abklingzeit</label>
+                  <label title="Gilt ab Beginn für automatische Auslöser und HA-Aktionen; der Testknopf ist ausgenommen.">Abklingzeit (Sekunden)<input id="event-cooldown-seconds" type="number" min="0.01" step="any" disabled></label>
                   <label>Auslöser<select id="event-trigger-type"><option value="manual">Manuell / Aktion</option><option value="state">Zustandswechsel</option><option value="event">HA-Event</option></select></label>
-                  <div id="event-trigger-state" hidden>
-                    <label>Entität<input id="event-trigger-entity" placeholder="binary_sensor.bewegung" autocomplete="off"></label>
-                    <label>Zielzustand<input id="event-trigger-to" placeholder="on" autocomplete="off"></label>
-                    <p class="muted">Nur ein tatsächlicher Zustandswechsel löst aus, nicht der Zustand beim Start.</p>
+                  </div>
+                  <div id="event-trigger-state" class="event-compact" hidden>
+                    <label title="Entitäts-ID eingeben oder einen Vorschlag auswählen.">Entität<input id="event-trigger-entity" list="event-entities" placeholder="binary_sensor.bewegung" autocomplete="off"><datalist id="event-entities"></datalist></label>
+                    <label title="Nur ein tatsächlicher Zustandswechsel löst aus, nicht der Zustand beim Start.">Zielzustand<input id="event-trigger-to" placeholder="on" autocomplete="off"></label>
                   </div>
                   <div id="event-trigger-bus" hidden>
-                    <label>HA-Eventtyp<input id="event-trigger-event" placeholder="klingel" autocomplete="off"></label>
+                    <label>HA-Eventtyp<input id="event-trigger-event" list="event-types" placeholder="klingel" autocomplete="off"><datalist id="event-types"></datalist></label>
+                    <small id="event-types-status" role="status"></small>
                   </div>
                 </div>
                 <div id="event-dates" hidden>
-                  <label>Terminart<select id="event-date-mode"><option value="annual">Zeitraum jährlich</option><option value="once">Zeitraum einmalig</option><option value="weekly">Wöchentlich</option><option value="dates_once">Einzelne Daten einmalig</option><option value="dates_annual">Einzelne Daten jährlich</option><option value="holiday">Feiertage aus HA-Kalender</option></select></label>
-                  <div id="event-date-range">
+                  <label title="Jährliche Termine speichern Monat und Tag; das Jahr wird ignoriert.">Terminart<select id="event-date-mode"><option value="annual">Zeitraum jährlich</option><option value="once">Zeitraum einmalig</option><option value="weekly">Wöchentlich</option><option value="dates_once">Einzelne Daten einmalig</option><option value="dates_annual">Einzelne Daten jährlich</option><option value="holiday">Feiertage aus HA-Kalender</option></select></label>
+                  <div id="event-date-range" class="event-compact" title="Beide Tage zählen mit; jährliche Zeiträume dürfen über den Jahreswechsel reichen.">
                     <label>Beginn<input id="event-date-start" type="date"></label>
                     <label>Ende<input id="event-date-end" type="date"></label>
-                    <p class="muted">Beide Tage zählen mit; jährliche Zeiträume dürfen über den Jahreswechsel reichen.</p>
                   </div>
                   <div id="event-date-weekly" hidden>
                     <p>Wochentage</p>
@@ -193,36 +245,35 @@ class DivoomOrchestratorPanel extends HTMLElement {
                   </div>
                   <div id="event-date-list-group" hidden>
                     <p>Einzelne Daten</p><div id="event-date-list"></div>
-                    <button type="button" class="secondary" id="event-date-add">+ Datum hinzufügen</button>
+                    <button type="button" class="secondary icon-button" id="event-date-add" aria-label="Datum hinzufügen" title="Datum hinzufügen"><ha-icon icon="mdi:plus" aria-hidden="true"></ha-icon></button>
                   </div>
-                  <p id="event-date-annual-hint" class="muted">Bei jährlicher Wiederholung wird nur Monat und Tag gespeichert; das gewählte Jahr wird ignoriert.</p>
+                  <span id="event-date-annual-hint" hidden></span>
                   <div id="event-date-holiday" hidden>
-                    <label>Feiertagskalender<select id="event-calendar"><option value="">Bitte auswählen</option></select></label>
-                    <div class="actions"><button type="button" class="secondary" id="event-holidays-load">Feiertage laden</button></div>
-                    <p class="muted">Die Auswahl enthält Termine der nächsten zwei Jahre. Die Namen müssen mit dem Kalender übereinstimmen.</p>
+                    <label title="Die Auswahl enthält Termine der nächsten zwei Jahre. Die Namen müssen mit dem Kalender übereinstimmen.">Feiertagskalender<select id="event-calendar"><option value="">Bitte auswählen</option></select></label>
+                    <div class="actions"><button type="button" class="secondary icon-button" id="event-holidays-load" aria-label="Feiertage laden" title="Feiertage laden"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button></div>
                     <div id="event-holidays"></div>
                   </div>
                 </div>
-                <label>Ausgewählter GIF-Ordner<input id="event-folder" value="." readonly></label>
-                <div class="folder-browser">
+                <div class="folder-field"><label>Ausgewählter GIF-Ordner<input id="event-folder" value="." readonly></label><button type="button" class="secondary icon-button" id="event-tree-open" aria-label="GIF-Ordner auswählen" title="GIF-Ordner auswählen"><ha-icon icon="mdi:folder-open" aria-hidden="true"></ha-icon></button></div>
+                <dialog id="event-tree-dialog" class="rotation-dialog" aria-label="GIF-Ordner auswählen">
                   <div class="folder-browser-title"><span>Ordner auswählen</span><button type="button" class="secondary folder-refresh" id="event-tree-refresh" aria-label="Event-Ordnerbaum aktualisieren" title="Ordnerbaum aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button></div>
                   <div class="folder-tree" id="event-tree" aria-label="Event-GIF-Ordner"></div>
-                </div>
-                <p class="muted">Die GIFs stammen aus dem ausgewählten Ordner. Ordnernamen auswählen; Pfeile öffnen oder schließen Unterordner.</p>
+                  <div class="actions"><button type="button" class="secondary" id="event-tree-close">Fertig</button></div>
+                </dialog>
                 <div class="actions">
-                  <button type="button" class="secondary" id="event-refresh">GIFs aktualisieren</button>
+                  <button type="button" class="secondary icon-button" id="event-refresh" aria-label="GIFs aktualisieren" title="GIFs aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button>
                 </div>
               </div>
-              <div>
+              <div class="event-gifs">
                 <p class="muted">Ausgewählte GIFs werden von oben nach unten abgespielt. Durchläufe sind eine Schätzung anhand der Framezeiten; der Pixoo kann abweichen. Neue GIFs sind zunächst nicht ausgewählt.</p>
                 <div id="event-list"></div>
               </div>
             </div>
             <div class="actions">
-              <button type="button" class="primary" id="event-save">Event speichern</button>
-              <button type="button" class="secondary" id="event-test">Gespeichertes Event testen</button>
-              <button type="button" class="secondary" id="event-duplicate">Datums-Event duplizieren</button>
-              <button type="button" class="secondary" id="event-delete">Event löschen</button>
+              <button type="button" class="primary icon-button" id="event-save" aria-label="Event speichern" title="Event speichern"><ha-icon icon="mdi:content-save" aria-hidden="true"></ha-icon></button>
+              <button type="button" class="secondary icon-button" id="event-test" aria-label="Gespeichertes Event testen" title="Gespeichertes Event testen"><ha-icon icon="mdi:play" aria-hidden="true"></ha-icon></button>
+              <button type="button" class="secondary icon-button" id="event-duplicate" aria-label="Datums-Event duplizieren" title="Datums-Event duplizieren"><ha-icon icon="mdi:content-copy" aria-hidden="true"></ha-icon></button>
+              <button type="button" class="secondary icon-button" id="event-delete" aria-label="Event löschen" title="Event löschen"><ha-icon icon="mdi:delete" aria-hidden="true"></ha-icon></button>
             </div>
             <p id="event-message" class="message" role="status" aria-live="polite"></p>
             </div>
@@ -230,10 +281,6 @@ class DivoomOrchestratorPanel extends HTMLElement {
           </section>
         </div>
         <div id="page-overview" class="grid">
-          <section class="card connection-card">
-            <h3>Verbindung:</h3>
-            <p id="connection-status" role="status" title="Der Status stammt vom in den Einstellungen gewählten HA-Sensor, nicht direkt vom Pixoo.">Status wird geladen …</p>
-          </section>
           <section class="card wide">
             <h3>Rotation</h3>
             <p class="muted">Blöcke bearbeiten oder per Drag &amp; Drop verschieben. Änderungen anschließend mit „Rotation speichern“ übernehmen. Die Startanimation bleibt immer vorn.</p>
@@ -344,6 +391,11 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-page]").forEach((button) => {
       button.addEventListener("click", () => this._showPage(button.dataset.page));
     });
+    for (const name of ["community", "event"]) {
+      const dialog = this.shadowRoot.querySelector(`#${name}-tree-dialog`);
+      this.shadowRoot.querySelector(`#${name}-tree-open`).addEventListener("click", () => dialog.showModal());
+      this.shadowRoot.querySelector(`#${name}-tree-close`).addEventListener("click", () => dialog.close());
+    }
     this._initRotation();
     this.shadowRoot.querySelector("#playlist").addEventListener("submit", (event) => {
       event.preventDefault();
@@ -384,6 +436,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this.shadowRoot.querySelector("#save-gifs").addEventListener("click", () => this._saveGifs());
     this._initEvents();
     this._initCommunity();
+    this._initMedia();
     const brightness = this.shadowRoot.querySelector("#brightness");
     brightness.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -411,9 +464,17 @@ class DivoomOrchestratorPanel extends HTMLElement {
   }
 
   _showPage(page) {
-    for (const name of ["overview", "events", "community", "settings"]) {
-      this.shadowRoot.querySelector(`#page-${name}`).hidden = name !== page;
-      const button = this.shadowRoot.querySelector(`[data-page="${name}"]`);
+    const eventKind = page === "trigger-events" ? "trigger" : page === "date-events" ? "date" : null;
+    if (eventKind && this._eventKind !== eventKind) {
+      if (this._eventLoading || this._eventSaving) return;
+      if (this._eventDirty && !window.confirm("Ungespeicherte Event-Änderungen verwerfen?")) return;
+      this._newEvent(eventKind);
+    }
+    for (const name of ["overview", "events", "media", "community", "settings"]) {
+      this.shadowRoot.querySelector(`#page-${name}`).hidden = name !== (eventKind ? "events" : page);
+    }
+    for (const button of this.shadowRoot.querySelectorAll("[data-page]")) {
+      const name = button.dataset.page;
       if (name === page) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     }
@@ -597,6 +658,8 @@ class DivoomOrchestratorPanel extends HTMLElement {
       }
     };
     const tree = this._folderTree(root.querySelector("#community-tree"), loadFolder);
+    this._communityTree = tree;
+    this._communityLoadFolder = loadFolder;
     root.querySelector("#community-tree-refresh").addEventListener("click", () => tree.refresh());
     const loadPage = async (page) => {
       const requestRevision = ++revision;
@@ -702,6 +765,233 @@ class DivoomOrchestratorPanel extends HTMLElement {
     loadFolder(".");
   }
 
+  _initMedia() {
+    const root = this.shadowRoot;
+    const get = (id) => root.querySelector(`#media-${id}`);
+    const message = (text, error = false) => {
+      get("message").textContent = text;
+      get("message").classList.toggle("error", error);
+    };
+    let folder = ".";
+    let selectedGif = null;
+    let revision = 0;
+    let busy = false;
+    let ready = false;
+    let destination = ".";
+    let pending = null;
+    const buttons = () => {
+      get("create").disabled = busy || !ready;
+      get("duplicate").disabled = busy || !ready || !!selectedGif || folder === ".";
+      get("move").disabled = get("delete").disabled = busy || !ready || (!selectedGif && folder === ".");
+      get("refresh").disabled = busy;
+    };
+    const load = async (path) => {
+      const request = ++revision;
+      ready = false;
+      buttons();
+      message("Ordnerinhalt wird geladen …");
+      try {
+        const [children, files] = await Promise.all([
+          this._hass.callWS({type: "divoom_orchestrator/event_folders", folder: path}),
+          this._hass.callWS({type: "divoom_orchestrator/playlist_files", folder: path}),
+        ]);
+        if (request !== revision) return false;
+        folder = path;
+        selectedGif = null;
+        ready = true;
+        get("path").textContent = `pixelart${path === "." ? "" : `/${path}`}`;
+        tree.select(path);
+        const items = get("items");
+        items.replaceChildren();
+        for (const child of children) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "media-item";
+          button.title = "Ordner öffnen";
+          const icon = document.createElement("ha-icon");
+          icon.setAttribute("icon", "mdi:folder");
+          icon.setAttribute("aria-hidden", "true");
+          const name = document.createElement("span");
+          name.textContent = child.split("/").pop();
+          button.append(icon, name);
+          button.addEventListener("click", () => { if (!busy) load(child); });
+          items.append(button);
+        }
+        const previews = [];
+        for (const file of files) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "media-item";
+          button.setAttribute("aria-pressed", "false");
+          button.title = "GIF auswählen";
+          const image = document.createElement("img");
+          image.alt = `Vorschau ${file.file.split("/").pop()}`;
+          const name = document.createElement("span");
+          name.textContent = file.file.split("/").pop();
+          const status = document.createElement("small");
+          status.textContent = "Vorschau wird geladen …";
+          button.append(image, name, status);
+          button.addEventListener("click", () => {
+            if (busy) return;
+            selectedGif = selectedGif === file.file ? null : file.file;
+            for (const item of items.querySelectorAll(".media-item[aria-pressed]")) {
+              item.setAttribute("aria-pressed", String(item === button && selectedGif !== null));
+            }
+            buttons();
+          });
+          items.append(button);
+          previews.push({file: file.file, image, status});
+        }
+        buttons();
+        message(`${children.length} Ordner, ${files.length} GIF(s). Ordner öffnen oder ein GIF auswählen.`);
+        let next = 0;
+        await Promise.all(Array.from({length: Math.min(4, previews.length)}, async () => {
+          while (next < previews.length && request === revision) {
+            const item = previews[next++];
+            try {
+              const preview = await this._hass.callWS({
+                type: "divoom_orchestrator/gif_preview", folder: path, file: item.file,
+              });
+              if (request !== revision) return;
+              item.image.src = `data:image/gif;base64,${preview.data}`;
+              item.status.textContent = "";
+            } catch (error) {
+              if (request !== revision) return;
+              item.status.textContent = `Vorschau nicht verfügbar: ${error.message || String(error)}`;
+              item.status.classList.add("error");
+            }
+          }
+        }));
+        return request === revision;
+      } catch (error) {
+        if (request === revision) {
+          message(`Ordner konnte nicht geladen werden: ${error.message || String(error)}`, true);
+          buttons();
+        }
+        return false;
+      }
+    };
+    const tree = this._folderTree(get("tree"), (path) => { if (!busy) load(path); });
+    const destinationTree = this._folderTree(get("destination-tree"), (path) => {
+      destination = path;
+      get("destination-path").textContent = `Ziel: pixelart${path === "." ? "" : `/${path}`}`;
+      destinationTree.select(path);
+    });
+    const invalidate = async (source = null, kind = null) => {
+      tree.refresh();
+      this._communityTree.refresh();
+      this._eventTree.refresh();
+      if (source && kind === "folder") {
+        const communityFolder = root.querySelector("#community-folder").value;
+        if (communityFolder === source || communityFolder.startsWith(`${source}/`)) {
+          await this._communityLoadFolder(".");
+        }
+        const eventFolder = root.querySelector("#event-folder").value;
+        if (eventFolder === source || eventFolder.startsWith(`${source}/`)) {
+          await this._eventLoadFolder(".", []);
+        }
+      }
+      if (source && kind === "gif" && root.querySelector("#event-folder").value === folder) {
+        await this._eventChangeFolder(folder);
+      }
+    };
+    const perform = async (request, source = null, kind = null, nextFolder = null) => {
+      busy = true;
+      buttons();
+      get("destination-confirm").disabled = true;
+      get("destination-cancel").disabled = true;
+      message("Aktion wird ausgeführt …");
+      try {
+        await this._hass.callWS(request);
+        if (get("destination").open) get("destination").close();
+        await invalidate(source, kind);
+        if (nextFolder !== null) folder = nextFolder;
+        if (await load(folder)) message("Aktion erfolgreich.");
+      } catch (error) {
+        const text = `Aktion fehlgeschlagen: ${error.message || String(error)}`;
+        message(text, true);
+        if (get("destination").open) {
+          get("destination-message").textContent = text;
+          get("destination-message").classList.add("error");
+        }
+      } finally {
+        busy = false;
+        get("destination-confirm").disabled = false;
+        get("destination-cancel").disabled = false;
+        buttons();
+      }
+    };
+    const mutable = () => {
+      if (this._eventDirty || this._eventLoading || this._eventSaving || this._rotationDirty || this._gifDirty) {
+        message("Bitte zuerst ungespeicherte Event-, Rotations- und Playlist-Änderungen speichern oder verwerfen und das Laden abwarten.", true);
+        return false;
+      }
+      return true;
+    };
+    get("create").addEventListener("click", () => {
+      pending = {action: "create", source: folder, kind: "folder"};
+      destination = folder;
+      get("destination-path").textContent = `Überordner: pixelart${folder === "." ? "" : `/${folder}`}`;
+      get("destination-message").textContent = "";
+      get("destination-message").classList.remove("error");
+      get("destination-tree").hidden = true;
+      get("copy-name-group").hidden = false;
+      get("name-label").textContent = "Ordnername";
+      get("copy-name").value = "";
+      get("destination-title").textContent = "Unterordner erstellen";
+      get("destination").showModal();
+      get("copy-name").focus();
+    });
+    const chooseDestination = (action) => {
+      if (action === "move" && !mutable()) return;
+      pending = {action, source: selectedGif || folder, kind: selectedGif ? "gif" : "folder"};
+      destination = ".";
+      get("destination-path").textContent = "Ziel: pixelart";
+      get("destination-message").textContent = "";
+      get("destination-message").classList.remove("error");
+      get("destination-tree").hidden = false;
+      get("copy-name-group").hidden = action !== "duplicate";
+      get("name-label").textContent = "Name der Kopie";
+      get("copy-name").value = `${folder.split("/").pop()} - Kopie`;
+      destinationTree.refresh();
+      destinationTree.select(".");
+      get("destination-title").textContent = action === "duplicate" ? "Ordner duplizieren" : "Zielordner auswählen";
+      get("destination").showModal();
+    };
+    get("duplicate").addEventListener("click", () => chooseDestination("duplicate"));
+    get("move").addEventListener("click", () => chooseDestination("move"));
+    get("destination-cancel").addEventListener("click", () => get("destination").close());
+    get("destination-confirm").addEventListener("click", () => {
+      if (!pending) return;
+      if (pending.action === "move" && !mutable()) return;
+      if (pending.action === "create") {
+        perform({type: "divoom_orchestrator/media_create", parent: pending.source, name: get("copy-name").value});
+      } else if (pending.action === "duplicate") {
+        perform({type: "divoom_orchestrator/media_duplicate", source: pending.source,
+          parent: destination, name: get("copy-name").value});
+      } else {
+        const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : ".";
+        perform({type: "divoom_orchestrator/media_mutate", action: "move", kind: pending.kind,
+          source: pending.source, parent: destination}, pending.source, pending.kind,
+        pending.kind === "folder" ? parent : null);
+      }
+    });
+    get("delete").addEventListener("click", () => {
+      if (!mutable()) return;
+      const source = selectedGif || folder;
+      const kind = selectedGif ? "gif" : "folder";
+      const warning = kind === "folder"
+        ? `Ordner "${source}" mit allen Unterordnern und Dateien endgültig löschen? Dies kann nicht rückgängig gemacht werden.`
+        : `GIF "${source}" endgültig löschen? Dies kann nicht rückgängig gemacht werden.`;
+      if (!window.confirm(warning)) return;
+      const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : ".";
+      perform({type: "divoom_orchestrator/media_mutate", action: "delete", kind, source}, source, kind,
+        kind === "folder" ? parent : null);
+    });
+    get("refresh").addEventListener("click", () => { tree.refresh(); load(folder); });
+    load(".");
+  }
+
   _rotationMessage(text, error = false) {
     for (const id of ["rotation-message", "rotation-dialog-message"]) {
       const message = this.shadowRoot.querySelector(`#${id}`);
@@ -750,7 +1040,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this._rotationRevision = 0;
     this._rotationTexts = Object.create(null);
     get("edit").addEventListener("click", () => this._rotationDialog("start-editor", "Startanimation bearbeiten"));
-    get("dates-edit").addEventListener("click", () => this._showPage("events"));
+    get("dates-edit").addEventListener("click", () => this._showPage("date-events"));
     get("weather-edit").addEventListener("click", () => this._rotationDialog("weather-settings", "Wetter bearbeiten"));
     get("dialog-close").addEventListener("click", () => get("editor").close());
     get("editor").addEventListener("keydown", (event) => {
@@ -1183,6 +1473,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
     get("date-add").addEventListener("click", () => { this._eventDateRow(""); dirty(); });
     get("holidays-load").addEventListener("click", () => this._eventLoadHolidays());
     get("trigger-type").addEventListener("change", () => this._eventTriggerMode());
+    const entitySuggestions = get("entities");
+    Object.keys(this._hass.states).sort().forEach((entity) => {
+      const option = document.createElement("option");
+      option.value = entity;
+      option.label = this._hass.states[entity].attributes?.friendly_name || entity;
+      entitySuggestions.append(option);
+    });
     get("choice").addEventListener("change", async () => {
       const selected = get("choice").value;
       if (this._eventLoading || this._eventSaving) {
@@ -1207,13 +1504,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
       button.addEventListener("click", async () => {
         if (this._eventLoading || this._eventSaving) return;
         if (this._eventDirty && !window.confirm("Ungespeicherte Event-Änderungen verwerfen?")) return;
-        this._eventKind = button.dataset.newEvent;
-        this._updateEventKind();
-        this._eventChoices("");
-        get("name").value = "";
-        this._eventSetSchedule(null);
-        this._eventDirty = false;
-        await this._eventLoadDefaultFolder();
+        await this._newEvent(button.dataset.newEvent);
       });
     });
     this._eventTree = this._folderTree(get("tree"), (folder) => this._eventChangeFolder(folder));
@@ -1224,6 +1515,40 @@ class DivoomOrchestratorPanel extends HTMLElement {
     get("duplicate").addEventListener("click", () => this._eventDuplicate());
     get("delete").addEventListener("click", () => this._eventDelete());
     this._eventLoadInitial();
+  }
+
+  async _newEvent(kind) {
+    this._eventKind = kind;
+    this._updateEventKind();
+    this._eventChoices("");
+    this.shadowRoot.querySelector("#event-name").value = "";
+    this._eventSetSchedule(null);
+    this._eventDirty = false;
+    await this._eventLoadDefaultFolder();
+  }
+
+  async _loadEventTypes() {
+    if (this._eventTypesLoaded || this._eventTypesLoading) return;
+    const status = this.shadowRoot.querySelector("#event-types-status");
+    this._eventTypesLoading = true;
+    status.textContent = "Eventtypen werden geladen …";
+    try {
+      const events = await this._hass.callApi("GET", "events");
+      if (!Array.isArray(events)) throw new Error("Ungültige Antwort");
+      const list = this.shadowRoot.querySelector("#event-types");
+      list.replaceChildren();
+      for (const name of events.map((event) => event.event).filter((name) => typeof name === "string").sort()) {
+        const option = document.createElement("option");
+        option.value = name;
+        list.append(option);
+      }
+      this._eventTypesLoaded = true;
+      status.textContent = "Vorschläge enthalten Eventtypen mit aktiven Listenern; eigene Eventtypen können eingegeben werden.";
+    } catch (error) {
+      status.textContent = `Eventtypen konnten nicht geladen werden: ${error.message || String(error)}. Eigene Eingabe ist möglich.`;
+    } finally {
+      this._eventTypesLoading = false;
+    }
   }
 
   async _eventLoadInitial() {
@@ -1283,6 +1608,9 @@ class DivoomOrchestratorPanel extends HTMLElement {
   }
 
   _updateEventKind() {
+    this.shadowRoot.querySelector("#events-trigger-group").hidden = this._eventKind !== "trigger";
+    this.shadowRoot.querySelector("#events-date-group").hidden = this._eventKind !== "date";
+    this.shadowRoot.querySelector("#events-title").textContent = this._eventKind === "date" ? "Datums-Events" : "Triggered-Events";
     this.shadowRoot.querySelector("#event-dates").hidden = this._eventKind !== "date";
     this.shadowRoot.querySelector("#event-priority-group").hidden = this._eventKind !== "trigger";
     this.shadowRoot.querySelector("#event-duplicate").hidden = this._eventKind !== "date";
@@ -1295,6 +1623,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     const type = this.shadowRoot.querySelector("#event-trigger-type").value;
     this.shadowRoot.querySelector("#event-trigger-state").hidden = type !== "state";
     this.shadowRoot.querySelector("#event-trigger-bus").hidden = type !== "event";
+    if (type === "event") this._loadEventTypes();
   }
 
   _eventDateMode() {
@@ -1501,12 +1830,14 @@ class DivoomOrchestratorPanel extends HTMLElement {
     value.addEventListener("input", dirty);
     const up = document.createElement("button");
     up.type = "button";
-    up.textContent = "↑";
+    up.innerHTML = '<ha-icon icon="mdi:arrow-up" aria-hidden="true"></ha-icon>';
     up.setAttribute("aria-label", `${file} nach oben`);
+    up.title = `${file} nach oben`;
     const down = document.createElement("button");
     down.type = "button";
-    down.textContent = "↓";
+    down.innerHTML = '<ha-icon icon="mdi:arrow-down" aria-hidden="true"></ha-icon>';
     down.setAttribute("aria-label", `${file} nach unten`);
+    down.title = `${file} nach unten`;
     up.addEventListener("click", () => {
       if (row.previousElementSibling) { row.parentElement.insertBefore(row, row.previousElementSibling); dirty(); }
     });

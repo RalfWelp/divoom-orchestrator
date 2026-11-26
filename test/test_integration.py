@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime
+import errno
 import importlib.util
 import io
 import json
@@ -173,6 +174,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         sys.modules.pop("test_divoom_orchestrator.gif_preview", None)
         sys.modules.pop("test_divoom_orchestrator.community", None)
         sys.modules.pop("test_divoom_orchestrator.community_ha", None)
+        sys.modules.pop("test_divoom_orchestrator.media_ha", None)
         sys.modules.pop("test_divoom_orchestrator.rotation_ha", None)
         sys.modules.pop("test_divoom_orchestrator.text_ha", None)
 
@@ -221,6 +223,111 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             message["search_id"] = "not-a-search"
             await community_ha.websocket_import(self.hass, connection, message)
             self.assertEqual(connection.send_error.call_args.args[1], "community_import_failed")
+
+    async def test_media_create_duplicate_move_delete_and_conflicts(self):
+        media = sys.modules["test_divoom_orchestrator.media_ha"]
+        root = self.root / "pixelart"
+        self.assertEqual(media.create(root, ".", "new"), "new")
+        (root / "rain" / "nested").mkdir()
+        (root / "rain" / "nested" / "other.gif").write_bytes(b"nested")
+        self.assertEqual(media.duplicate(root, "rain", ".", "copy"), "copy")
+        self.assertEqual((root / "copy" / "one.gif").read_bytes(), b"test")
+        self.assertEqual((root / "copy" / "nested" / "other.gif").read_bytes(), b"nested")
+        with self.assertRaises(FileExistsError):
+            media.duplicate(root, "rain", ".", "copy")
+        with self.assertRaises(ValueError):
+            media.duplicate(root, "rain", "rain", "copy")
+        with self.assertRaises((ValueError, FileNotFoundError)):
+            media.create(root, "..", "escape")
+        with self.assertRaises(ValueError):
+            media.create(root, ".", "../escape")
+        with self.assertRaises(ValueError):
+            media.delete(root, ".", "folder")
+        with self.assertRaises(OSError):
+            media.move(root, "copy", ".", "folder")
+        (root / "new" / "copy").mkdir()
+        with self.assertRaises(OSError):
+            media.move(root, "copy", "new", "folder")
+        (root / "new" / "copy").rmdir()
+        self.assertEqual(media.move(root, "copy", "new", "folder"), "new/copy")
+        (root / "new" / "one.gif").write_bytes(b"existing")
+        with self.assertRaises(OSError):
+            media.move(root, "new/copy/one.gif", "new", "gif")
+        self.assertEqual((root / "new" / "one.gif").read_bytes(), b"existing")
+        (root / "new" / "one.gif").unlink()
+        self.assertEqual(media.move(root, "new/copy/one.gif", "new", "gif"), "new/one.gif")
+        media.delete(root, "new/one.gif", "gif")
+        media.delete(root, "new", "folder")
+        self.assertFalse((root / "new").exists())
+        self.assertTrue((root / "rain" / "one.gif").exists())
+
+    async def test_media_mutations_protect_references_and_active_playback(self):
+        media = sys.modules["test_divoom_orchestrator.media_ha"]
+        data = self.hass.data["divoom_orchestrator"]
+        data["events"].events["Door"] = {
+            "folder": "rain", "steps": [{"file": "rain/one.gif", "mode": "seconds", "value": 2}]
+        }
+        connection = types.SimpleNamespace(send_result=unittest.mock.Mock(), send_error=unittest.mock.Mock())
+        await media.websocket_mutate(self.hass, connection, {
+            "id": 1, "action": "delete", "kind": "gif", "source": "./rain/one.gif",
+        })
+        self.assertIn("Event: Door", connection.send_error.call_args.args[2])
+        await media.websocket_mutate(self.hass, connection, {
+            "id": 2, "action": "delete", "kind": "folder", "source": "rain",
+        })
+        self.assertIn("Event: Door", connection.send_error.call_args.args[2])
+        data["events"].events.clear()
+        data["durations"].values["rain/one.gif"] = 2
+        await media.websocket_mutate(self.hass, connection, {
+            "id": 3, "action": "delete", "kind": "gif", "source": "rain/one.gif",
+        })
+        self.assertIn("Playlist", connection.send_error.call_args.args[2])
+        data["durations"].values.clear()
+        await self.start()
+        await media.websocket_mutate(self.hass, connection, {
+            "id": 4, "action": "delete", "kind": "gif", "source": "rain/one.gif",
+        })
+        self.assertIn("stoppen", connection.send_error.call_args.args[2])
+        self.assertTrue((self.root / "pixelart" / "rain" / "one.gif").exists())
+
+    async def test_media_weather_and_fallback_references(self):
+        media = sys.modules["test_divoom_orchestrator.media_ha"]
+        data = self.hass.data["divoom_orchestrator"]
+        data["rotation"].config = {"folder": "rain", "steps": [], "blocks": ["weather"]}
+        self.assertIn("Wetterrotation", media.references(data, "wetter/sunny", "folder"))
+        self.assertIn("Fehlerbilder der Rotation und Events", media.references(data, "fehler/text.gif", "gif"))
+
+    async def test_media_refuses_symlink_directories_and_contents(self):
+        media = sys.modules["test_divoom_orchestrator.media_ha"]
+        root = self.root / "pixelart"
+        outside = self.root / "outside"
+        outside.mkdir()
+        try:
+            (root / "link").symlink_to(outside, target_is_directory=True)
+            (root / "rain" / "link").symlink_to(outside, target_is_directory=True)
+        except OSError as err:
+            self.skipTest(f"Symlinks unavailable: {err}")
+        with self.assertRaises(ValueError):
+            media.create(root, "link", "child")
+        with self.assertRaises(ValueError):
+            media.duplicate(root, "rain", ".", "copy")
+        with self.assertRaises(ValueError):
+            media.delete(root, "rain", "folder")
+        self.assertTrue(outside.is_dir())
+
+    async def test_media_linux_syscall_fallback_reports_conflicts(self):
+        media = sys.modules["test_divoom_orchestrator.media_ha"]
+        source, target = self.root / "source", self.root / "target"
+        def conflict(*args):
+            media.ctypes.set_errno(errno.EEXIST)
+            return -1
+        syscall = unittest.mock.Mock(side_effect=conflict)
+        with patch.object(media.sys, "platform", "linux"), \
+                patch.object(media.sysconfig, "get_platform", return_value="linux-x86_64"), \
+                patch.object(media.ctypes, "CDLL", return_value=types.SimpleNamespace(syscall=syscall)):
+            with self.assertRaises(FileExistsError):
+                media._rename_no_replace(source, target)
+        self.assertEqual(syscall.call_count, 1)
 
     async def test_rotation_cycle_snapshots_start_and_active_dates(self):
         data = self.hass.data["divoom_orchestrator"]

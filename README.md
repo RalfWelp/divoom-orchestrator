@@ -36,9 +36,10 @@ Start einer Playlist geprüft.
 ## Oberfläche
 
 Nach der Einrichtung erscheint für Administratoren **Divoom Orchestrator** in
-der Seitenleiste. Das Panel hat vier Bereiche: **Übersicht & Rotation**
+der Seitenleiste. Das Panel hat Bereiche für **Übersicht & Rotation**
 (inklusive Bluetooth-Status des ausgewählten HA-Sensors und Ordner-Playlist),
-**Event-Editor**, **Divoom Community** und **Einstellungen**. Die Ordner-Playlist ist als
+**Triggered-Events**, **Datums-Events**, **Ordnerverwaltung**, **Divoom Community**
+und **Einstellungen**. Die Ordner-Playlist ist als
 Übergangslösung einklappbar; ihr Ordner wird von Hand eingegeben und nicht
 dauerhaft gespeichert. Mit **GIFs laden / aktualisieren** werden die
 Dateien des Ordners aufgelistet; für jede gewünschte Animation lässt sich eine
@@ -63,15 +64,34 @@ geschätzte Anzahl an Durchläufen einstellen.
 Eine separat aktivierbare Helligkeitsautomatik ist ebenfalls im Panel
 konfigurierbar.
 Der angezeigte Verbindungsstatus stammt aus der konfigurierten MQTT-Entität,
-nicht direkt vom Pixoo. Ein Live-Test des Event-Editors in Home Assistant steht noch aus.
+nicht direkt vom Pixoo.
 Das Panel übernimmt das helle oder dunkle Home-Assistant-Theme; es ändert
 keine globalen Theme-Einstellungen.
+
+### Ordnerverwaltung
+
+Links öffnet der Baum einen Ordner, rechts zeigt die Kachelansicht seine
+Unterordner und GIFs. Ein Klick öffnet einen Unterordner beziehungsweise
+markiert ein GIF. Die Symbolschaltflächen erstellen einen Unterordner,
+duplizieren den geöffneten Ordner mit Inhalt, verschieben die Auswahl,
+löschen sie nach Bestätigung oder aktualisieren die Ansicht. Zum Verschieben
+und Duplizieren wird das Ziel im Ordnerbaum gewählt; Duplikate erhalten einen
+eigenen Namen. Namenskonflikte werden abgelehnt, nicht überschrieben.
+
+Löschen ist endgültig und umfasst bei Ordnern sämtliche Dateien und
+Unterordner. Der Hauptordner `pixelart` ist geschützt. Verweise aus
+gespeicherten Events, der Startanimation und Playlist-Anzeigezeiten sowie
+Fehlerbilder und die verwendeten Wetterordner verhindern das Verschieben
+und Löschen. Externe Verweise anderer Integrationen können nicht erkannt
+werden. Solche Aktionen benötigen eine gestoppte Rotation oder Playlist;
+ungespeicherte Änderungen im Panel müssen zunächst gespeichert oder
+verworfen werden. Symbolische Links werden nicht verwaltet.
 
 ### Divoom Community
 
 Hier lassen sich 16×16-Werke anonym nach Begriff und Sortierung suchen und
 als animierte Vorschau betrachten. Der Suchbegriff wird an Divoom übermittelt.
-Im aufklappbaren Zielordnerbaum einen vorhandenen Ordner unter `/config/pixelart` wählen
+Über das Ordnersymbol im aufklappbaren Zielordnerbaum einen vorhandenen Ordner unter `/config/pixelart` wählen
 und ein einzelnes Werk als GIF speichern. Dafür benötigt Home Assistant
 Schreibzugriff; bestehende `divoom-<ID>.gif`-Dateien werden nicht überschrieben.
 Der Speicherstatus steht direkt unter der Schaltfläche des jeweiligen Werks.
@@ -83,20 +103,23 @@ Die Divoom-Cloud-Schnittstelle ist inoffiziell, kann sich ändern und begrenzt
 Anfragen und anonyme Ergebnisse. Pro Panel werden höchstens vier Vorschauen
 gleichzeitig abgerufen. Nicht alle Formate lassen sich über die
 Schnittstelle als 16×16-GIF abrufen; betroffene Vorschauen melden einen Fehler.
+Die Suche zeigt bis zu 100 anonyme Ergebnisse vor dem Sichtbarkeitsfilter in Seiten zu 18 Werken.
 Ein Abruf kann nach Erreichen des Anfragelimits vorübergehend fehlschlagen.
 GIF speichert Framezeiten in 10-ms-Schritten; die Wiedergabe kann daher leicht
 von der Divoom-Vorschau abweichen.
 
 ### Event-Editor
 
-Im Event-Editor einen Namen eingeben, mit dem Ordnerbrowser einen Unterordner
+Unter **Triggered-Events** beziehungsweise **Datums-Events** einen Namen eingeben, mit dem Ordnerbrowser einen Unterordner
 wählen und die gewünschten GIFs markieren. Die Divoom-Gerätekennung wird
 einmal in den Einstellungen gespeichert und für Helligkeit, Event-Tests
 und die Ordner-Playlist verwendet. Bereits gespeicherte Event-Gerätekennungen
 werden nicht für die Wiedergabe verwendet. Service-Aufrufe mit expliziter
 Gerätekennung bleiben unverändert.
-Die Seitenleiste gruppiert gespeicherte Einträge in Triggered-Events und
-Datums-Events. Datums-Events unterstützen einmalige oder jährliche Zeiträume,
+Die jeweilige Seitenleiste zeigt die gespeicherten Einträge dieser Event-Art.
+Die Entitäts- und Eventtypfelder bieten filterbare Vorschläge; Eventtypen
+umfassen solche mit aktiven Listenern, eigene Eingaben bleiben möglich.
+Datums-Events unterstützen einmalige oder jährliche Zeiträume,
 mehrere einzelne einmalige oder jährlich wiederkehrende Daten, mehrere
 Wochentage sowie ausgewählte Feiertage aus einem HA-Kalender. Daten werden
 über den Kalender des Browsers ausgewählt; bei jährlichen Terminen wird das
@@ -126,7 +149,7 @@ ignoriert und startet keine Abklingzeit; die Prioritätsregeln gelten weiterhin.
 Nach einem Neustart von Home Assistant beginnt die Abklingzeit nicht erneut.
 Bei neuen Datums-Events öffnet der Browser den Ordner `date_events`, falls
 dieser existiert. Anderenfalls beginnt er im Stammordner. Der ausgewählte
-GIF-Ordner zeigt die aktuell geladenen GIFs; im aufklappbaren Ordnerbaum
+GIF-Ordner zeigt die aktuell geladenen GIFs; über das Ordnersymbol im aufklappbaren Ordnerbaum
 kann man auch tiefer verschachtelte Ordner direkt auswählen. Die Pfeile öffnen
 und schließen Zweige, die Aktualisieren-Schaltfläche lädt den Baum erneut.
 Die Reihenfolge lässt sich über die Pfeile ändern. Pro GIF gelten Sekunden

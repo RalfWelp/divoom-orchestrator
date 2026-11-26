@@ -32,10 +32,10 @@ class CommunityTests(unittest.TestCase):
             record(1), record(2, HideFlag=1), record(3, CopyrightFlag=1),
             record(4, CopyrightFlag=None),
         ]}
-        results = community.search("cat", 2, 0)["works"]
+        results = community.search("cat", 1, 0)["works"]
         self.assertEqual([(r["id"], r["importable"]) for r in results],
                          [(1, True), (3, False), (4, False)])
-        self.assertEqual(request.call_args.args[1]["StartNum"], 10)
+        self.assertEqual(request.call_args.args[1]["StartNum"], 1)
         self.assertEqual(request.call_args.args[1]["FileSize"], 1)
 
     @patch.object(community, "build_opener")
@@ -50,8 +50,31 @@ class CommunityTests(unittest.TestCase):
 
     @patch.object(community, "request")
     def test_hidden_results_do_not_end_pagination(self, request):
-        request.return_value = {"FileList": [record(i + 1, HideFlag=1) for i in range(9)]}
+        request.return_value = {"FileList": [record(i + 1, HideFlag=1) for i in range(community.PAGE_SIZE)]}
         self.assertEqual(community.search("cat", 1, 1), {"works": [], "has_more": True})
+
+    @patch.object(community, "request")
+    def test_pagination_requests_prefix_and_limits_anonymous_results(self, request):
+        request.side_effect = lambda command, payload: {
+            "FileList": [record(i + 1) for i in range(payload["EndNum"])]
+        }
+        second = community.search("cat", 2, 1)
+        self.assertEqual([work["id"] for work in second["works"]], list(range(19, 37)))
+        self.assertTrue(second["has_more"])
+        self.assertEqual(request.call_args.args[1]["StartNum"], 1)
+        self.assertEqual(request.call_args.args[1]["EndNum"], 36)
+        last = community.search("cat", 6, 1)
+        self.assertEqual([work["id"] for work in last["works"]], list(range(91, 101)))
+        self.assertFalse(last["has_more"])
+        with self.assertRaises(ValueError):
+            community.search("cat", 7, 1)
+
+    @patch.object(community, "request")
+    def test_short_prefix_ends_pagination(self, request):
+        request.return_value = {"FileList": [record(i + 1) for i in range(20)]}
+        result = community.search("cat", 2, 1)
+        self.assertEqual([work["id"] for work in result["works"]], [19, 20])
+        self.assertFalse(result["has_more"])
 
     @patch.object(community, "request")
     def test_render_preserves_frames_and_timing(self, request):
