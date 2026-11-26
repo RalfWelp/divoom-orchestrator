@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from lzallright import LZOError
+from PIL import Image
 from servoom import PixelBeanDecoder
 
 API = "https://app.divoom-gz.com/"
@@ -146,7 +147,7 @@ def render(file_id: str) -> bytes:
         raise ValueError("Dieses Divoom-Format oder seine Framezeiten werden nicht unterstützt")
     fmt = data[0]
     valid = (
-        (fmt == 8 and len(data) == 769)
+        (fmt in (3, 8) and len(data) == 769)
         or (fmt == 9 and len(data) > 4 and (len(data) - 4) % 768 == 0
             and (len(data) - 4) // 768 <= MAX_FRAMES)
         or (fmt == 12 and len(data) == 3076)
@@ -157,19 +158,24 @@ def render(file_id: str) -> bytes:
     )
     if not valid:
         raise ValueError("Dieses Divoom-Format oder seine Framezeiten werden nicht unterstützt")
-    try:
-        bean = PixelBeanDecoder.decode_stream(io.BytesIO(data))
-        if (bean is None or bean.width != 16 or bean.height != 16
-                or not 1 <= bean.total_frames <= MAX_FRAMES
-                or len(bean.frames_data) != bean.total_frames
-                or (bean.total_frames > 1 and not 10 <= bean.speed <= 655350)):
-            raise ValueError("Dieses Divoom-Format oder seine Framezeiten werden nicht unterstützt")
-        images = [bean.get_frame_image(i + 1) for i in range(bean.total_frames)]
-    except (IndexError, TypeError, StructError, LZOError) as err:
-        raise ValueError("Divoom-Datei ist beschädigt oder wird nicht unterstützt") from err
+    if fmt == 3:
+        images = [Image.frombytes("RGB", (16, 16), data[1:])]
+        speed = 0
+    else:
+        try:
+            bean = PixelBeanDecoder.decode_stream(io.BytesIO(data))
+            if (bean is None or bean.width != 16 or bean.height != 16
+                    or not 1 <= bean.total_frames <= MAX_FRAMES
+                    or len(bean.frames_data) != bean.total_frames
+                    or (bean.total_frames > 1 and not 10 <= bean.speed <= 655350)):
+                raise ValueError("Dieses Divoom-Format oder seine Framezeiten werden nicht unterstützt")
+            images = [bean.get_frame_image(i + 1) for i in range(bean.total_frames)]
+            speed = bean.speed
+        except (IndexError, TypeError, StructError, LZOError) as err:
+            raise ValueError("Divoom-Datei ist beschädigt oder wird nicht unterstützt") from err
     output = io.BytesIO()
     images[0].save(output, format="GIF", save_all=True, append_images=images[1:],
-                   duration=bean.speed, loop=0, optimize=False)
+                   duration=speed, loop=0, optimize=False)
     content = output.getvalue()
     if len(content) > MAX_RESPONSE:
         raise ValueError("GIF ist zu groß")

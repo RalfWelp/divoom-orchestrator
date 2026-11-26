@@ -121,6 +121,17 @@ class CommunityTests(unittest.TestCase):
             self.assertEqual(image.convert("RGB").getpixel((0, 0)), (1, 2, 3))
 
     @patch.object(community, "read_response")
+    def test_render_accepts_legacy_raw_rgb(self, read_response):
+        read_response.return_value = b"\x03" + bytes([1, 2, 3] * 256)
+        with Image.open(io.BytesIO(community.render("group1/test/1"))) as image:
+            self.assertEqual(image.size, (16, 16))
+            self.assertEqual(image.n_frames, 1)
+            self.assertEqual(image.convert("RGB").getpixel((0, 0)), (1, 2, 3))
+        read_response.return_value = b"\x03" + bytes(767)
+        with self.assertRaises(ValueError):
+            community.render("group1/test/1")
+
+    @patch.object(community, "read_response")
     def test_render_rejects_invalid_paths_and_unbounded_files(self, read_response):
         for file_id in (None, "", "../private", "group1/../private", "//host/file",
                         "group1/file?x=1", "https://example.com/file"):
