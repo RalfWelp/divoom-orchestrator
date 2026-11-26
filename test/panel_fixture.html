@@ -5,6 +5,8 @@
   <div id="calls" hidden></div>
   <div id="menu-event" hidden></div>
   <div id="failure" hidden></div>
+  <div id="community-limit" hidden>on</div>
+  <div id="community-preview-count" hidden>0</div>
   <script type="module">
     import "../custom_components/divoom_orchestrator/frontend/panel.js";
     const panel = document.createElement("divoom-orchestrator-panel");
@@ -75,12 +77,27 @@
           return null;
         }
         if (request.type === "divoom_orchestrator/community_search") {
+          if (new URLSearchParams(location.search).has("community-limit")) {
+            return {search_id: "fixture", has_more: false, works: Array.from({length: 7}, (_, index) => ({
+              id: index + 1, title: `Bild ${index + 1}`, author: "Test", importable: true,
+            }))};
+          }
           return {search_id: "fixture", has_more: request.page === 1, works: request.page === 1 ? [
             {id: 42, title: "Testbild", author: "Testautor", importable: true},
             {id: 43, title: "Geschützt", author: "Testautor", importable: false},
           ] : []};
         }
         if (request.type === "divoom_orchestrator/community_preview") {
+          if (new URLSearchParams(location.search).has("community-limit")) {
+            const count = document.querySelector("#community-preview-count");
+            count.textContent = Number(count.textContent) + 1;
+            if (document.querySelector("#community-limit").textContent === "on" &&
+                (new URLSearchParams(location.search).get("community-limit") !== "once" || Number(count.textContent) === 1)) {
+              const error = new Error("Divoom-Anfragelimit erreicht; frühestens in 60 Sekunden erneut versuchen.");
+              error.code = "community_rate_limited";
+              throw error;
+            }
+          }
           return {data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"};
         }
         if (request.type === "divoom_orchestrator/community_import") {

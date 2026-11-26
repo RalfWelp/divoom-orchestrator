@@ -1,5 +1,7 @@
 """Administrator-only community search, preview and import."""
 
+import asyncio
+import math
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,6 +11,47 @@ from homeassistant.components import websocket_api
 from . import community
 
 DOMAIN = "divoom_orchestrator"
+REQUEST_INTERVAL = 2.5
+FILE_REQUEST_INTERVAL = 0.25
+
+
+class CommunityRequests:
+    """Space requests across panels and stop sending during a rate-limit delay."""
+
+    def __init__(self, interval):
+        self._slots = asyncio.Semaphore(4)
+        self._start_lock = asyncio.Lock()
+        self._interval = interval
+        self._next_start = 0.0
+        self._blocked_until = 0.0
+
+    def _check_limit(self, now):
+        if now < self._blocked_until:
+            raise community.RateLimited(math.ceil(self._blocked_until - now))
+
+    async def run(self, hass, func, *args):
+        loop = asyncio.get_running_loop()
+        async with self._slots:
+            async with self._start_lock:
+                self._check_limit(loop.time())
+                delay = self._next_start - loop.time()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                self._check_limit(loop.time())
+                self._next_start = loop.time() + self._interval
+            try:
+                return await hass.async_add_executor_job(func, *args)
+            except community.RateLimited as err:
+                self._blocked_until = max(self._blocked_until, loop.time() + err.retry_seconds)
+                raise
+
+
+def requests(hass, files=False):
+    data = hass.data[DOMAIN]
+    key = "community_file_requests" if files else "community_requests"
+    if key not in data:
+        data[key] = CommunityRequests(FILE_REQUEST_INTERVAL if files else REQUEST_INTERVAL)
+    return data[key]
 
 
 @websocket_api.require_admin
@@ -21,9 +64,13 @@ DOMAIN = "divoom_orchestrator"
 @websocket_api.async_response
 async def websocket_search(hass, connection, msg):
     try:
-        result = await hass.async_add_executor_job(
+        result = await requests(hass).run(
+            hass,
             community.search, msg["query"], msg["page"], msg["sort"]
         )
+    except community.RateLimited as err:
+        connection.send_error(msg["id"], "community_rate_limited", str(err))
+        return
     except (OSError, ValueError) as err:
         connection.send_error(msg["id"], "community_search_failed", str(err))
         return
@@ -55,8 +102,13 @@ async def websocket_preview(hass, connection, msg):
     try:
         item = selected(hass, msg["search_id"], msg["gallery_id"])
         if item["content"] is None:
-            item["content"] = await hass.async_add_executor_job(community.render, msg["gallery_id"])
+            item["content"] = await requests(hass, files=True).run(
+                hass, community.render, item["work"].get("file_id")
+            )
         result = community.encoded(item["content"])
+    except community.RateLimited as err:
+        connection.send_error(msg["id"], "community_rate_limited", str(err))
+        return
     except (OSError, ValueError) as err:
         connection.send_error(msg["id"], "community_preview_failed", str(err))
         return

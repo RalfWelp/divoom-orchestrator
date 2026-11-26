@@ -237,11 +237,11 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         community_ha = sys.modules["test_divoom_orchestrator.community_ha"]
         connection = types.SimpleNamespace(send_result=unittest.mock.Mock(), send_error=unittest.mock.Mock())
         works = [
-            {"id": 42, "title": "Art", "author": "Artist", "importable": True},
+            {"id": 42, "title": "Art", "author": "Artist", "importable": True, "file_id": "group1/test"},
             {"id": 43, "title": "Restricted", "author": "Artist", "importable": False},
         ]
         with patch.object(community_ha.community, "search", return_value={"works": works, "has_more": False}), \
-                patch.object(community_ha.community, "render", return_value=b"GIF"):
+                patch.object(community_ha.community, "render", return_value=b"GIF") as render:
             await community_ha.websocket_search(
                 self.hass, connection, {"id": 1, "query": "cat", "page": 1, "sort": 1}
             )
@@ -254,6 +254,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
                 self.hass, connection, {"id": 3, "search_id": search_id, "gallery_id": 42}
             )
             self.assertEqual(connection.send_result.call_args.args[1]["data"], "R0lG")
+            render.assert_called_once_with("group1/test")
             message = {"id": 4, "search_id": search_id, "gallery_id": 42, "folder": "rain"}
             await community_ha.websocket_import(self.hass, connection, message)
             self.assertEqual(connection.send_result.call_args.args[1]["file"], "rain/divoom-42.gif")
@@ -262,6 +263,87 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             message["search_id"] = "not-a-search"
             await community_ha.websocket_import(self.hass, connection, message)
             self.assertEqual(connection.send_error.call_args.args[1], "community_import_failed")
+
+    async def test_community_paces_concurrent_requests(self):
+        community_ha = sys.modules["test_divoom_orchestrator.community_ha"]
+        limiter = community_ha.requests(self.hass)
+        starts = []
+
+        async def record_start(func, *args):
+            starts.append(asyncio.get_running_loop().time())
+
+        with patch.object(self.hass, "async_add_executor_job", side_effect=record_start):
+            await asyncio.gather(*(limiter.run(self.hass, lambda: None) for _ in range(2)))
+        self.assertEqual(len(starts), 2)
+        self.assertGreaterEqual(starts[1] - starts[0], 2.45)
+
+    async def test_community_file_requests_have_separate_pacing(self):
+        community_ha = sys.modules["test_divoom_orchestrator.community_ha"]
+        starts = []
+
+        async def record_start(func, *args):
+            starts.append(asyncio.get_running_loop().time())
+
+        limiter = community_ha.requests(self.hass, files=True)
+        with patch.object(self.hass, "async_add_executor_job", side_effect=record_start):
+            await asyncio.gather(*(limiter.run(self.hass, lambda: None) for _ in range(2)))
+        self.assertEqual(len(starts), 2)
+        self.assertGreaterEqual(starts[1] - starts[0], 0.24)
+        self.assertLess(starts[1] - starts[0], 2.0)
+
+    async def test_community_file_rate_limit_blocks_previews_until_retry(self):
+        community_ha = sys.modules["test_divoom_orchestrator.community_ha"]
+        connection = types.SimpleNamespace(send_result=unittest.mock.Mock(), send_error=unittest.mock.Mock())
+        works = [{"id": 42, "title": "Art", "author": "Artist", "importable": True, "file_id": "group1/test"}]
+        with patch.object(community_ha, "REQUEST_INTERVAL", 0), \
+                patch.object(community_ha, "FILE_REQUEST_INTERVAL", 0), \
+                patch.object(community_ha.community, "search", return_value={"works": works, "has_more": False}) as search, \
+                patch.object(community_ha.community, "render", side_effect=community_ha.community.RateLimited(60)) as render:
+            await community_ha.websocket_search(self.hass, connection, {
+                "id": 1, "query": "cat", "page": 1, "sort": 1,
+            })
+            search_id = connection.send_result.call_args.args[1]["search_id"]
+            await community_ha.websocket_preview(self.hass, connection, {
+                "id": 2, "search_id": search_id, "gallery_id": 42,
+            })
+            self.assertEqual(connection.send_error.call_args.args[1], "community_rate_limited")
+            await community_ha.websocket_search(self.hass, connection, {
+                "id": 3, "query": "cat", "page": 1, "sort": 1,
+            })
+            self.assertEqual(connection.send_result.call_args.args[1]["works"], works)
+            self.assertEqual(search.call_count, 2)
+            await community_ha.websocket_preview(self.hass, connection, {
+                "id": 5, "search_id": search_id, "gallery_id": 42,
+            })
+            self.assertEqual(connection.send_error.call_args.args[1], "community_rate_limited")
+            self.assertEqual(render.call_count, 1)
+            community_ha.requests(self.hass, files=True)._blocked_until = 0
+            render.side_effect = None
+            render.return_value = b"GIF"
+            await community_ha.websocket_preview(self.hass, connection, {
+                "id": 4, "search_id": search_id, "gallery_id": 42,
+            })
+            self.assertEqual(connection.send_result.call_args.args[1]["data"], "R0lG")
+
+    async def test_community_rate_limit_stops_queued_requests(self):
+        community_ha = sys.modules["test_divoom_orchestrator.community_ha"]
+        calls = 0
+
+        async def reject(func, *args):
+            nonlocal calls
+            calls += 1
+            await asyncio.sleep(0.02)
+            raise community_ha.community.RateLimited(60)
+
+        with patch.object(community_ha, "REQUEST_INTERVAL", 0.1), \
+                patch.object(self.hass, "async_add_executor_job", side_effect=reject):
+            limiter = community_ha.requests(self.hass)
+            results = await asyncio.gather(
+                *(limiter.run(self.hass, lambda: None) for _ in range(6)),
+                return_exceptions=True,
+            )
+        self.assertEqual(calls, 1)
+        self.assertTrue(all(isinstance(result, community_ha.community.RateLimited) for result in results))
 
     async def test_media_create_duplicate_move_delete_and_conflicts(self):
         media = sys.modules["test_divoom_orchestrator.media_ha"]

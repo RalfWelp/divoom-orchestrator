@@ -100,11 +100,24 @@ Urheber und Divooms Nutzungsbedingungen beachten. Privat, verborgen oder
 als urheberrechtlich eingeschränkt gekennzeichnete Werke werden nicht importiert.
 
 Die Divoom-Cloud-Schnittstelle ist inoffiziell, kann sich ändern und begrenzt
-Anfragen und anonyme Ergebnisse. Pro Panel werden höchstens vier Vorschauen
-gleichzeitig abgerufen. Nicht alle Formate lassen sich über die
-Schnittstelle als 16×16-GIF abrufen; betroffene Vorschauen melden einen Fehler.
-Die Suche zeigt bis zu 100 anonyme Ergebnisse vor dem Sichtbarkeitsfilter in Seiten zu 18 Werken.
-Ein Abruf kann nach Erreichen des Anfragelimits vorübergehend fehlschlagen.
+Anfragen und anonyme Ergebnisse. Die Suche verwendet die Cloud-API, Vorschauen
+und Importe die Originaldateien vom Divoom-Dateiserver und den
+[Servoom-Decoder](https://github.com/fabkury/servoom) (Apache-2.0). Servoom
+und seine Abhängigkeiten werden beim Laden der Integration aus einem auf einen
+Commit und SHA-256 fixierten GitHub-Archiv installiert; dafür benötigt Home
+Assistant Internetzugang. Wenn die Installation fehlschlägt, lädt die
+Integration nicht.
+
+Suchanfragen starten HA-weit mit mindestens 2,5 Sekunden Abstand, Dateiabrufe
+mit mindestens 0,25 Sekunden Abstand und höchstens vier gleichzeitig. Die
+Limits gelten getrennt für API und Dateiserver. Bei HTTP 429 werden weitere
+Anfragen an den betroffenen Server pausiert: Die Wartezeit aus `Retry-After`
+wird beachtet, andernfalls wird zunächst eine Minute abgewartet. Fehlende
+Vorschauen lassen sich anschließend über die Aktualisieren-Schaltfläche erneut
+anfordern; Divoom kann eine längere Sperre vorgeben. Andere Geräte können
+dieselbe Anfragebegrenzung teilen. Nicht alle Dateiformate und Animationen
+werden unterstützt; betroffene Vorschauen melden einen Fehler. Die Suche zeigt
+bis zu 100 anonyme Ergebnisse vor dem Sichtbarkeitsfilter in Seiten zu 18 Werken.
 GIF speichert Framezeiten in 10-ms-Schritten; die Wiedergabe kann daher leicht
 von der Divoom-Vorschau abweichen.
 

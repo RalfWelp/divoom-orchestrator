@@ -168,6 +168,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
               <div class="actions"><button type="button" class="secondary" id="community-tree-close">Fertig</button></div>
             </dialog>
             <p id="community-message" class="message" role="status" aria-live="polite"></p>
+            <button type="button" class="secondary icon-button" id="community-retry" aria-label="Fehlende Vorschauen erneut laden" title="Fehlende Vorschauen erneut laden" hidden><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button>
             <div id="community-results" class="community-grid"></div>
             <div class="actions"><button type="button" class="secondary" id="community-prev" disabled>Zurück</button><span id="community-page"></span><button type="button" class="secondary" id="community-next" disabled>Weiter</button></div>
           </section>
@@ -698,6 +699,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     const results = root.querySelector("#community-results");
     const prev = root.querySelector("#community-prev");
     const next = root.querySelector("#community-next");
+    const retry = root.querySelector("#community-retry");
     let revision = 0;
     let currentPage = 1;
     let currentQuery = "";
@@ -741,9 +743,53 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this._communityTree = tree;
     this._communityLoadFolder = loadFolder;
     root.querySelector("#community-tree-refresh").addEventListener("click", () => tree.refresh());
+    const loadPreviews = async (previews, searchId, requestRevision, worksCount, page) => {
+      let limited = null;
+      retry.hidden = true;
+      retry.disabled = true;
+      const pending = previews.filter((item) => !item.loaded);
+      report(`${pending.length} Vorschauen werden gedrosselt geladen …`);
+      await Promise.all(pending.map(async (item) => {
+        await acquirePreview();
+        try {
+          if (requestRevision !== revision) return;
+          if (limited) {
+            item.status.textContent = "Pausiert: Divoom-Anfragelimit erreicht.";
+            item.status.classList.add("error");
+            return;
+          }
+          item.status.classList.remove("error");
+          item.status.textContent = "Vorschau wird geladen …";
+          const preview = await this._hass.callWS({
+            type: "divoom_orchestrator/community_preview", search_id: searchId, gallery_id: item.work.id,
+          });
+          if (requestRevision !== revision) return;
+          item.image.src = `data:image/gif;base64,${preview.data}`;
+          item.status.textContent = "";
+          item.save.disabled = false;
+          item.loaded = true;
+        } catch (error) {
+          if (requestRevision !== revision) return;
+          if (error.code === "community_rate_limited") limited = error.message || String(error);
+          item.status.textContent = `Vorschau nicht verfügbar: ${error.message || String(error)}`;
+          item.status.classList.add("error");
+        } finally {
+          releasePreview();
+        }
+      }));
+      if (requestRevision !== revision) return;
+      const missing = previews.filter((item) => !item.loaded).length;
+      retry.hidden = !missing;
+      retry.disabled = false;
+      report(limited ? `${limited} Fehlende Vorschauen können danach erneut geladen werden.`
+        : missing ? `${missing} Vorschau(en) konnten nicht geladen werden.`
+          : `${worksCount} Ergebnisse auf Seite ${page}.`, Boolean(missing));
+    };
     const loadPage = async (page) => {
       const requestRevision = ++revision;
       prev.disabled = next.disabled = true;
+      retry.hidden = true;
+      retry.onclick = null;
       results.replaceChildren();
       report("Community-Ergebnisse werden geladen …");
       try {
@@ -807,28 +853,11 @@ class DivoomOrchestratorPanel extends HTMLElement {
               save.textContent = "Als GIF speichern";
             }
           });
-          previews.push({work, image, status, save});
+          previews.push({work, image, status, save, loaded: false});
         }
-        await Promise.all(previews.map(async (item) => {
-          await acquirePreview();
-          try {
-            if (requestRevision !== revision) return;
-            const preview = await this._hass.callWS({
-              type: "divoom_orchestrator/community_preview", search_id: search.search_id, gallery_id: item.work.id,
-            });
-            if (requestRevision !== revision) return;
-            item.image.src = `data:image/gif;base64,${preview.data}`;
-            item.status.textContent = "";
-            item.save.disabled = false;
-          } catch (error) {
-            if (requestRevision !== revision) return;
-            item.status.textContent = `Vorschau nicht verfügbar: ${error.message || String(error)}`;
-            item.status.classList.add("error");
-          } finally {
-            releasePreview();
-          }
-        }));
-        if (requestRevision === revision && works.length) report(`${works.length} Ergebnisse auf Seite ${page}.`);
+        retry.onclick = () => loadPreviews(previews, search.search_id, requestRevision, works.length, page);
+        if (previews.length) await loadPreviews(previews, search.search_id, requestRevision, works.length, page);
+        else if (works.length) report(`${works.length} Ergebnisse auf Seite ${page}.`);
       } catch (error) {
         if (requestRevision === revision) report(`Suche fehlgeschlagen: ${error.message || String(error)}`, true);
       }
