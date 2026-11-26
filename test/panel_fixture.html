@@ -9,6 +9,7 @@
     import "../custom_components/divoom_orchestrator/frontend/panel.js";
     const panel = document.createElement("divoom-orchestrator-panel");
     const events = {};
+    let settings = {duration: 5, cooldown: 5, community_sort: 1};
     const folders = new Set([".", "bewegung", "date_events", "date_events/sylvester",
       "date_events/weihnachten", "klingel", "rotation", "wetter"]);
     const gifs = new Map(Array.from(folders, (folder) => [folder, ["cloudy.gif", "new.gif"]]));
@@ -22,6 +23,11 @@
       },
       callWS: async (request) => {
         document.querySelector("#calls").textContent = JSON.stringify(request);
+        if (request.type === "divoom_orchestrator/settings") return {...settings};
+        if (request.type === "divoom_orchestrator/settings_save") {
+          settings = {duration: request.duration, cooldown: request.cooldown, community_sort: request.community_sort};
+          return {...settings};
+        }
         if (request.type === "divoom_orchestrator/playlist_files") {
           if (!folders.has(request.folder)) throw new Error("Ordner nicht gefunden");
           return gifs.get(request.folder).map((name) => ({file: join(request.folder, name), duration: null}));
@@ -31,7 +37,10 @@
         }
         if (request.type === "divoom_orchestrator/event_folders") {
           if (!folders.has(request.folder)) throw new Error("Ordner nicht gefunden");
-          return Array.from(folders).filter((folder) => folder !== "." && parent(folder) === request.folder).sort();
+          const children = Array.from(folders).filter((folder) => folder !== "." && parent(folder) === request.folder).sort();
+          return request.include_children ? children.map((path) => ({
+            path, has_children: Array.from(folders).some((item) => item !== "." && parent(item) === path),
+          })) : children;
         }
         if (request.type === "divoom_orchestrator/media_create") {
           const target = join(request.parent, request.name);

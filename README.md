@@ -141,8 +141,8 @@ Triggered-Events unterstützen einen Zustandswechsel einer HA-Entität, einen
 HA-Eventtyp oder die manuelle Aktion `divoom_orchestrator.trigger`.
 Ein bereits beim Start aktiver Zustand löst nicht aus. Deaktivierte Events
 werden automatisch und über die Aktion nicht ausgelöst.
-Optional kann pro Triggered-Event eine Abklingzeit in Sekunden aktiviert
-werden (Vorgabe 10 Sekunden). Sie beginnt mit der tatsächlichen Wiedergabe
+Für neue Triggered-Events ist die einstellbare Standard-Abklingzeit zunächst
+aktiviert (anfangs 5 Sekunden; 0 deaktiviert sie für neue Events). Sie beginnt mit der tatsächlichen Wiedergabe
 und gilt für automatische Auslöser und die Aktion. Auslöser während der
 Abklingzeit werden ignoriert, die Aktion meldet einen Fehler. Der Testknopf
 ignoriert und startet keine Abklingzeit; die Prioritätsregeln gelten weiterhin.
@@ -183,7 +183,7 @@ eigenen Dialogen bearbeitet. **Fertig** schließt den Dialog und behält die
 Änderungen als Entwurf; erst **Rotation speichern** in der Übersicht speichert
 alle Änderungen dauerhaft. Die Startabfolge steht am Anfang
 jedes Durchlaufs; optional folgen ein Wetterblock, mehrere Textblöcke und alle
-aktiven Datums-Events alphabetisch. Ihre Reihenfolge lässt sich per Drag & Drop ändern und im
+aktiven Datums-Events alphabetisch. Ihre Reihenfolge lässt sich mit Pfeilschaltflächen oder per Drag & Drop ändern und im
 Rotationseditor speichern. Wetter, Datums-Events und jeder Textblock können
 einzeln in der Übersicht aktiviert oder deaktiviert werden; Einstellungen und
 Reihenfolge bleiben dabei erhalten. Änderungen werden nach **Rotation speichern**
@@ -235,7 +235,7 @@ auf einem echten Home-Assistant-/Pixoo-System geprüft.
 ### Helligkeit
 
 Die Automatik ist zunächst ausgeschaltet. Im Panel Divoom-Gerätekennung,
-Bewegungsmelder und optional den Bluetooth-Statussensor auswählen, Werte und
+optional Bewegungsmelder und Bluetooth-Statussensor auswählen, Werte und
 morgendliche Startzeit einstellen und aktiv speichern. Andere Automationen,
 die die Helligkeit desselben Displays steuern, vorher deaktivieren.
 
@@ -259,6 +259,14 @@ Fehler wird eine dauerhafte HA-Benachrichtigung erstellt und später erneut
 versucht. Bei Wiederverbindung des ausgewählten Statussensors wird der Wert
 erneut angewendet. Einstellungen bleiben über HA-Neustarts erhalten; ein
 temporärer Test nicht.
+
+### Standardwerte und Diagnose
+
+Unter **Einstellungen** lassen sich die Vorgaben für die Anzeigedauer neuer
+GIF-Schritte (anfangs 5 Sekunden), die Abklingzeit neuer Trigger-Events und
+die Community-Sortierung speichern. Bereits gespeicherte Einträge bleiben
+unverändert. Die Diagnose zeigt den Zustand des gewählten Bluetooth-Sensors;
+dies ist keine direkte Verbindungsprüfung.
 
 ## Aktionen
 

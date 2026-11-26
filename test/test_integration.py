@@ -175,6 +175,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         sys.modules.pop("test_divoom_orchestrator.community", None)
         sys.modules.pop("test_divoom_orchestrator.community_ha", None)
         sys.modules.pop("test_divoom_orchestrator.media_ha", None)
+        sys.modules.pop("test_divoom_orchestrator.settings_ha", None)
         sys.modules.pop("test_divoom_orchestrator.rotation_ha", None)
         sys.modules.pop("test_divoom_orchestrator.text_ha", None)
 
@@ -193,6 +194,44 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.hass.services.handlers["divoom_orchestrator", "stop"](types.SimpleNamespace(data={}))
         self.assertEqual(len(self.hass.services.calls), 1)
+
+    async def test_folder_nodes_identify_only_folders_with_children(self):
+        events = sys.modules["test_divoom_orchestrator.events_ha"]
+        root = self.root / "pixelart"
+        (root / "nested" / "child").mkdir(parents=True)
+        self.assertEqual(events.folder_nodes(root, "."), [
+            {"path": "nested", "has_children": True},
+            {"path": "rain", "has_children": False},
+        ])
+        self.assertEqual(events.folders(root, "."), ["nested", "rain"])
+        connection = types.SimpleNamespace(send_result=unittest.mock.Mock(), send_error=unittest.mock.Mock())
+        await events.websocket_folders(self.hass, connection, {
+            "id": 1, "folder": ".", "include_children": True,
+        })
+        self.assertEqual(connection.send_result.call_args.args[1], events.folder_nodes(root, "."))
+
+    async def test_settings_validate_save_and_restore(self):
+        settings = self.hass.data["divoom_orchestrator"]["settings"]
+        values = {"duration": 12, "cooldown": 0, "community_sort": 0}
+        await settings.save(values)
+        settings.store.async_save.assert_awaited_once_with(values)
+        settings.store.async_load.return_value = values
+        settings.values = {}
+        await settings.load()
+        self.assertEqual(settings.values, values)
+        with self.assertRaises(ValueError):
+            await settings.save({"duration": float("nan"), "cooldown": 1, "community_sort": 1})
+        self.assertEqual(settings.values, values)
+        settings_ha = sys.modules["test_divoom_orchestrator.settings_ha"]
+        connection = types.SimpleNamespace(send_result=unittest.mock.Mock(), send_error=unittest.mock.Mock())
+        await settings_ha.websocket_save(self.hass, connection, {
+            "id": 1, "duration": 8, "cooldown": 3, "community_sort": 1,
+        })
+        self.assertEqual(connection.send_result.call_args.args[1]["duration"], 8)
+        await settings_ha.websocket_save(self.hass, connection, {
+            "id": 2, "duration": 0, "cooldown": 3, "community_sort": 1,
+        })
+        connection.send_error.assert_called_once()
 
     async def test_community_preview_and_import_are_restricted_to_search_results(self):
         community_ha = sys.modules["test_divoom_orchestrator.community_ha"]

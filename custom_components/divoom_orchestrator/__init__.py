@@ -24,6 +24,7 @@ from .rotation_ha import RotationRuntime, register as register_rotation
 from .text_ha import TextRuntime
 from .community_ha import register as register_community
 from .media_ha import register as register_media
+from .settings_ha import Settings, register as register_settings
 
 DOMAIN = "divoom_orchestrator"
 _LOGGER = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     register_rotation(hass)
     register_community(hass)
     register_media(hass)
+    register_settings(hass)
 
     def controller() -> PlaylistController:
         instance = hass.data[DOMAIN].get("controller")
@@ -154,12 +156,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await rotation.load()
     texts = TextRuntime(hass)
     await texts.load()
+    settings = Settings(hass)
+    await settings.load()
     hass.data[DOMAIN]["controller"] = PlaylistController(create_task, report_error)
     hass.data[DOMAIN]["durations"] = durations
     hass.data[DOMAIN]["events"] = events
     hass.data[DOMAIN]["brightness"] = brightness
     hass.data[DOMAIN]["rotation"] = rotation
     hass.data[DOMAIN]["texts"] = texts
+    hass.data[DOMAIN]["settings"] = settings
     events.listen()
     await rotation.auto_start()
     return True
@@ -179,6 +184,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await instance.stop()
     if brightness is not None:
         await brightness.stop()
-    for key in ("controller", "brightness", "rotation", "durations", "events", "texts"):
+    for key in ("controller", "brightness", "rotation", "durations", "events", "texts", "settings"):
         hass.data[DOMAIN].pop(key, None)
     return True

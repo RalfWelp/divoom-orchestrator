@@ -94,6 +94,14 @@ def folders(root: Path, folder: str) -> list[str]:
     return sorted(children, key=lambda value: (value.casefold(), value))
 
 
+def folder_nodes(root: Path, folder: str) -> list[dict]:
+    """List folders with whether each contains further folders."""
+    return [
+        {"path": child, "has_children": bool(folders(root, child))}
+        for child in folders(root, folder)
+    ]
+
+
 class EventStore:
     """Store ordered event steps independently from playlist durations."""
 
@@ -378,12 +386,14 @@ def runtime(hass: HomeAssistant) -> EventStore:
 @websocket_api.websocket_command({
     vol.Required("type"): "divoom_orchestrator/event_folders",
     vol.Required("folder"): str,
+    vol.Optional("include_children", default=False): bool,
 })
 @websocket_api.async_response
 async def websocket_folders(hass, connection, msg):
     try:
         store = runtime(hass)
-        result = await hass.async_add_executor_job(folders, store.root, msg["folder"])
+        list_folders = folder_nodes if msg.get("include_children", False) else folders
+        result = await hass.async_add_executor_job(list_folders, store.root, msg["folder"])
         connection.send_result(msg["id"], result)
     except (OSError, ValueError, HomeAssistantError) as err:
         connection.send_error(msg["id"], "folder_error", str(err))

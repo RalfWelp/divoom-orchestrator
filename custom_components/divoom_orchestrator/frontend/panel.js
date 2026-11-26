@@ -4,6 +4,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._busy = false;
     this._initialized = false;
+    this._preferences = {duration: 5, cooldown: 5, community_sort: 1};
   }
 
   set hass(hass) {
@@ -27,7 +28,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
         header button { font-size:22px; background:none; padding:2px 6px; color:inherit; }
         h1 { margin:0; font-size:21px; font-weight:500; }
         main { max-width:1100px; margin:auto; padding:28px 20px; }
-        .hero { border-radius:18px; padding:14px 20px; background:linear-gradient(115deg,#145c70,#278b84); color:#fff; margin-bottom:22px; }
+        .hero { border-radius:18px; padding:14px 20px; background:linear-gradient(115deg,#145c70,#278b84); color:#fff; margin-bottom:22px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
         .eyebrow { font-size:12px; letter-spacing:.12em; font-weight:700; text-transform:uppercase; opacity:.85; }
         h2 { font-size:23px; margin:9px 0; } p { line-height:1.5; }
         .hero h2 { margin:3px 0; font-size:20px; }
@@ -35,7 +36,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:20px; }
         .card { background:var(--panel-card); border-radius:16px; padding:22px; box-shadow:0 2px 12px #0001; }
         h3 { margin:0 0 8px; font-size:18px; } .muted { color:var(--panel-muted); font-size:14px; }
-        .hero-connection { display:flex; align-items:center; gap:6px; margin-top:6px; font-size:14px; }
+        .hero-connection { display:flex; align-items:center; justify-content:flex-end; gap:6px; font-size:14px; text-align:right; }
         .hero-connection p { margin:0; }
         label { display:block; margin-top:17px; font-size:14px; font-weight:600; }
         input,select { width:100%; margin-top:7px; padding:11px; border:1px solid var(--panel-divider); border-radius:8px; background:var(--panel-card); color:var(--panel-text); font:inherit; }
@@ -118,11 +119,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .folder-browser-title { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:14px; font-weight:600; }
         .folder-refresh { display:grid; place-items:center; width:36px; height:36px; padding:0; }
         .folder-tree { max-height:270px; overflow:auto; margin-top:6px; padding:8px; border:1px solid var(--panel-divider); border-radius:10px; background:var(--panel-secondary); }
+        #media-tree { max-height:540px; }
+        #event-tree { max-height:405px; }
         .folder-tree ul { list-style:none; margin:0; padding:0; }
         .folder-tree ul ul { margin-left:19px; padding-left:5px; border-left:1px solid var(--panel-divider); }
         .folder-row { display:flex; align-items:center; min-width:0; }
         .folder-toggle { display:grid; place-items:center; width:32px; height:36px; padding:0; flex:none; background:transparent; color:var(--panel-muted); }
-        .folder-toggle:disabled { cursor:default; opacity:.25; }
+        .folder-toggle:disabled { visibility:hidden; }
         .folder-select { display:flex; align-items:center; gap:8px; flex:1; min-width:0; padding:7px 8px; background:transparent; color:var(--panel-text); text-align:left; font-weight:normal; overflow-wrap:anywhere; }
         .folder-select ha-icon { flex:none; color:var(--panel-muted); }
         .folder-select[aria-pressed="true"] { background:var(--primary-color,#16889a); color:white; font-weight:600; }
@@ -131,13 +134,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
         .rotation-block:has(.rotation-toggle input:not(:checked)) .rotation-description { opacity:.65; }
         dialog.rotation-dialog { width:min(680px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:1px solid var(--panel-divider); border-radius:16px; padding:24px; background:var(--panel-card); color:var(--panel-text); box-shadow:0 12px 40px #0006; }
         dialog.rotation-dialog::backdrop { background:#0009; }
-        @media (max-width:700px) { .event-layout, .media-layout { grid-template-columns:1fr; } .rotation-block { flex-wrap:wrap; } }
+        @media (max-width:700px) { .event-layout, .media-layout { grid-template-columns:1fr; } .rotation-block { flex-wrap:wrap; } .hero { flex-wrap:wrap; } .hero-connection { margin-left:auto; } }
       </style>
       <header><button id="menu" aria-label="Menü öffnen">☰</button><h1>Divoom Orchestrator</h1></header>
       <main>
-        <section class="hero"><div class="eyebrow">Deine Smart Doorbell</div>
+        <section class="hero"><div><div class="eyebrow">Deine Smart Doorbell</div>
           <h2>Animationen für deinen Pixoo</h2>
-          <p>Rotation, Events und Einstellungen für dein Display.</p>
+          <p>Rotation, Events und Einstellungen für dein Display.</p></div>
           <div class="hero-connection"><ha-icon icon="mdi:bluetooth" aria-hidden="true"></ha-icon><p id="connection-status" role="status" title="Der Status stammt vom in den Einstellungen gewählten HA-Sensor, nicht direkt vom Pixoo.">Status wird geladen …</p></div>
         </section>
         <nav class="navigation" aria-label="Orchestrator-Bereiche">
@@ -148,6 +151,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
           <button type="button" class="secondary" data-page="community">Divoom Community</button>
           <button type="button" class="secondary" data-page="settings">Einstellungen</button>
         </nav>
+        <p id="preferences-load-status" class="message error" role="status" hidden></p>
         <div id="page-community" class="grid" hidden>
           <section class="card wide">
             <h3>Divoom Community</h3>
@@ -254,15 +258,12 @@ class DivoomOrchestratorPanel extends HTMLElement {
                     <div id="event-holidays"></div>
                   </div>
                 </div>
-                <div class="folder-field"><label>Ausgewählter GIF-Ordner<input id="event-folder" value="." readonly></label><button type="button" class="secondary icon-button" id="event-tree-open" aria-label="GIF-Ordner auswählen" title="GIF-Ordner auswählen"><ha-icon icon="mdi:folder-open" aria-hidden="true"></ha-icon></button></div>
+                <div class="folder-field"><label>Ausgewählter GIF-Ordner<input id="event-folder" value="." readonly></label><button type="button" class="secondary icon-button" id="event-tree-open" aria-label="GIF-Ordner auswählen" title="GIF-Ordner auswählen"><ha-icon icon="mdi:folder-open" aria-hidden="true"></ha-icon></button><button type="button" class="secondary icon-button" id="event-refresh" aria-label="GIFs aktualisieren" title="GIFs aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button></div>
                 <dialog id="event-tree-dialog" class="rotation-dialog" aria-label="GIF-Ordner auswählen">
                   <div class="folder-browser-title"><span>Ordner auswählen</span><button type="button" class="secondary folder-refresh" id="event-tree-refresh" aria-label="Event-Ordnerbaum aktualisieren" title="Ordnerbaum aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button></div>
                   <div class="folder-tree" id="event-tree" aria-label="Event-GIF-Ordner"></div>
                   <div class="actions"><button type="button" class="secondary" id="event-tree-close">Fertig</button></div>
                 </dialog>
-                <div class="actions">
-                  <button type="button" class="secondary icon-button" id="event-refresh" aria-label="GIFs aktualisieren" title="GIFs aktualisieren"><ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon></button>
-                </div>
               </div>
               <div class="event-gifs">
                 <p class="muted">Ausgewählte GIFs werden von oben nach unten abgespielt. Durchläufe sind eine Schätzung anhand der Framezeiten; der Pixoo kann abweichen. Neue GIFs sind zunächst nicht ausgewählt.</p>
@@ -283,7 +284,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
         <div id="page-overview" class="grid">
           <section class="card wide">
             <h3>Rotation</h3>
-            <p class="muted">Blöcke bearbeiten oder per Drag &amp; Drop verschieben. Änderungen anschließend mit „Rotation speichern“ übernehmen. Die Startanimation bleibt immer vorn.</p>
+            <p class="muted">Blöcke bearbeiten oder mit den Pfeilen verschieben. Änderungen anschließend mit „Rotation speichern“ übernehmen. Die Startanimation bleibt immer vorn.</p>
             <ol class="rotation-preview" id="rotation-blocks" aria-label="Rotationsablauf">
               <li class="rotation-block"><span class="rotation-icon" aria-hidden="true">✨</span><span class="rotation-description"><strong>Startanimation</strong><span>Ausgewählte GIFs · am Anfang jedes Durchlaufs</span></span><span class="rotation-badge">🔒 Fest</span><button type="button" class="secondary rotation-edit" id="rotation-edit" aria-label="Startanimation bearbeiten" title="Startanimation bearbeiten"><ha-icon icon="mdi:cog" aria-hidden="true"></ha-icon></button></li>
               <li class="rotation-block" data-block="weather" draggable="true"><span class="rotation-icon" aria-hidden="true">🌤️</span><span class="rotation-description"><strong>Wetter</strong><span>Aktuelle Wetteranzeige · verschiebbar</span></span><label class="rotation-toggle"><input id="rotation-weather-enabled" type="checkbox" aria-label="Wetter aktivieren"><span>Inaktiv</span></label><button type="button" class="secondary rotation-edit" id="rotation-weather-edit" aria-label="Wetter bearbeiten" title="Wetter bearbeiten"><ha-icon icon="mdi:cog" aria-hidden="true"></ha-icon></button></li>
@@ -362,14 +363,16 @@ class DivoomOrchestratorPanel extends HTMLElement {
         </div>
         <div id="page-settings" class="grid" hidden>
           <section class="card">
-            <h3>Automatische Helligkeit</h3>
-            <p class="muted">Die Automatik steuert das Display direkt. Bei Bewegung 100 %, mindestens 30 Sekunden. Tests gelten 30 Sekunden und setzen danach die Automatik fort.</p>
+            <h3>Display und Verbindung</h3>
             <form id="brightness">
-              <label><input type="checkbox" name="enabled">Automatik aktivieren</label>
               <label>Divoom-Gerätekennung für alle Wiedergaben<input name="device" required autocomplete="off"></label>
-              <p class="muted">Einmal speichern; gilt für Helligkeit, Event-Tests und die Ordner-Playlist.</p>
-              <label>Bewegungsmelder<select name="motion"><option value="">Keiner</option></select></label>
+              <p class="muted">Die Gerätekennung gilt für Helligkeit, Events und Wiedergabe.</p>
               <label>Bluetooth-Status für Wiederverbindung<select name="connection"><option value="">Keiner</option></select></label>
+              <p class="muted">Optionaler HA-Sensor. Bei Wechsel auf connected wird die Helligkeit erneut übertragen; die Anzeige zeigt den Sensorzustand, nicht eine direkte Bluetooth-Abfrage.</p>
+              <h3>Automatische Helligkeit</h3>
+              <p class="muted">Die Automatik steuert das Display direkt. Ein optionaler Bewegungsmelder setzt es bei Bewegung auf 100 % für mindestens 30 Sekunden. Tests gelten 30 Sekunden und setzen danach die Automatik fort.</p>
+              <label><input type="checkbox" name="enabled">Automatik aktivieren</label>
+              <label>Bewegungsmelder (optional)<select name="motion"><option value="">Keiner</option></select></label>
               <label>Startzeit morgens<input type="time" name="morning" required></label>
               <label>Tag (%)<input type="number" name="day" min="0" max="100" step="1" required></label>
               <button type="button" class="secondary brightness-test" data-level="day">Tag testen</button>
@@ -382,6 +385,24 @@ class DivoomOrchestratorPanel extends HTMLElement {
               <p id="brightness-message" class="message" role="status" aria-live="polite"></p>
             </form>
           </section>
+          <section class="card">
+            <h3>Standardwerte</h3>
+            <p class="muted">Diese Vorgaben gelten für neu hinzugefügte GIFs und neue Trigger-Events. Gespeicherte Einträge bleiben unverändert.</p>
+            <form id="preferences">
+              <label>GIF-Anzeigedauer (Sekunden)<input name="duration" type="number" min="0.01" max="3600" step="any" required></label>
+              <label>Abklingzeit neuer Trigger-Events (Sekunden)<input name="cooldown" type="number" min="0" step="any" required></label>
+              <p class="muted">0 deaktiviert die Abklingzeit für neue Events.</p>
+              <h3>Community</h3>
+              <label>Standard-Sortierung<select name="community_sort"><option value="1">Beliebt</option><option value="0">Neueste</option></select></label>
+              <div class="actions"><button type="submit" class="primary">Standardwerte speichern</button></div>
+              <p id="preferences-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="card">
+            <h3>Diagnose</h3>
+            <p class="muted">Der Bluetooth-Status entspricht der ausgewählten HA-Entität. Wiedergabe- und Helligkeitsfehler erscheinen zusätzlich in den Home-Assistant-Benachrichtigungen.</p>
+            <p id="diagnostic-connection" role="status"></p>
+          </section>
         </div>
       </main>`;
     this._initialized = true;
@@ -391,6 +412,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-page]").forEach((button) => {
       button.addEventListener("click", () => this._showPage(button.dataset.page));
     });
+    this._initPreferences();
     for (const name of ["community", "event"]) {
       const dialog = this.shadowRoot.querySelector(`#${name}-tree-dialog`);
       this.shadowRoot.querySelector(`#${name}-tree-open`).addEventListener("click", () => dialog.showModal());
@@ -480,6 +502,60 @@ class DivoomOrchestratorPanel extends HTMLElement {
     }
   }
 
+  _initPreferences() {
+    const root = this.shadowRoot;
+    const form = root.querySelector("#preferences");
+    const message = root.querySelector("#preferences-message");
+    const status = root.querySelector("#preferences-load-status");
+    const sort = root.querySelector('#community-search [name="sort"]');
+    let sortTouched = false;
+    sort.addEventListener("change", () => { sortTouched = true; });
+    const setDisabled = (disabled) => form.querySelectorAll("input,select,button").forEach((item) => { item.disabled = disabled; });
+    const apply = (values, updateSort) => {
+      this._preferences = values;
+      for (const name of ["duration", "cooldown", "community_sort"]) form.elements[name].value = values[name];
+      if (updateSort) sort.value = String(values.community_sort);
+    };
+    setDisabled(true);
+    message.textContent = "Standardwerte werden geladen …";
+    this._preferencesReady = this._hass.callWS({type: "divoom_orchestrator/settings"}).then((values) => {
+      apply(values, !sortTouched);
+      setDisabled(false);
+      message.textContent = "";
+    }).catch((error) => {
+      message.textContent = `Standardwerte konnten nicht geladen werden: ${error.message || String(error)}`;
+      message.classList.add("error");
+      status.textContent = `${message.textContent} Bis zum Neuladen gelten 5 Sekunden und die Sortierung „Beliebt“.`;
+      status.hidden = false;
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      setDisabled(true);
+      message.classList.remove("error");
+      message.textContent = "Standardwerte werden gespeichert …";
+      try {
+        const values = await this._hass.callWS({
+          type: "divoom_orchestrator/settings_save",
+          duration: Number(form.elements.duration.value),
+          cooldown: Number(form.elements.cooldown.value),
+          community_sort: Number(form.elements.community_sort.value),
+        });
+        apply(values, true);
+        if (!this._eventDirty && !this._eventLoading && !this._eventSaving &&
+            !root.querySelector("#event-choice").value && !root.querySelector("#event-name").value) {
+          await this._newEvent(this._eventKind);
+        }
+        message.textContent = "Standardwerte gespeichert.";
+      } catch (error) {
+        message.textContent = `Speichern fehlgeschlagen: ${error.message || String(error)}`;
+        message.classList.add("error");
+      } finally {
+        setDisabled(false);
+      }
+    });
+  }
+
   _folderTree(container, onSelect) {
     let nodes = new Map();
     let selected = ".";
@@ -544,9 +620,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
       node.status.textContent = "Unterordner werden geladen …";
       node.loading = (async () => {
         try {
-          const folders = await this._hass.callWS({type: "divoom_orchestrator/event_folders", folder: node.path});
+          const folders = await this._hass.callWS({type: "divoom_orchestrator/event_folders", folder: node.path, include_children: true});
           if (node.generation !== generation) return false;
-          folders.forEach((folder) => createNode(folder, node.children));
+          folders.forEach(({path, has_children}) => {
+            const child = createNode(path, node.children);
+            child.toggle.disabled = !has_children;
+            child.loaded = !has_children;
+          });
           node.loaded = true;
           node.toggle.disabled = folders.length === 0;
           if (!folders.length) setExpanded(node, false);
@@ -1003,7 +1083,37 @@ class DivoomOrchestratorPanel extends HTMLElement {
   _rotationChanged() {
     this._rotationDirty = true;
     this._rotationRevision++;
+    this._updateRotationMoveButtons();
     this._rotationMessage("Ungespeicherte Änderungen – bitte Rotation speichern.");
+  }
+
+  _rotationMoveButtons(block) {
+    for (const [direction, icon] of [["up", "mdi:arrow-up"], ["down", "mdi:arrow-down"]]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary rotation-edit";
+      button.dataset.move = direction;
+      const image = document.createElement("ha-icon");
+      image.setAttribute("icon", icon);
+      image.setAttribute("aria-hidden", "true");
+      button.append(image);
+      block.append(button);
+    }
+  }
+
+  _updateRotationMoveButtons() {
+    const blocks = [...this.shadowRoot.querySelectorAll("#rotation-blocks > [data-block]")];
+    blocks.forEach((block, index) => {
+      const name = block.querySelector(".rotation-description strong").textContent;
+      for (const [direction, disabled, suffix] of [
+        ["up", index === 0, "nach oben"], ["down", index === blocks.length - 1, "nach unten"],
+      ]) {
+        const button = block.querySelector(`[data-move="${direction}"]`);
+        button.disabled = disabled;
+        button.title = `${name} ${suffix}`;
+        button.setAttribute("aria-label", button.title);
+      }
+    });
   }
 
   _rotationToggle(block) {
@@ -1059,7 +1169,22 @@ class DivoomOrchestratorPanel extends HTMLElement {
       weather.add(new Option(this._hass.states[id].attributes?.friendly_name || id, id));
     });
     const blocks = get("blocks");
-    for (const block of blocks.querySelectorAll("[data-block]")) this._rotationToggle(block);
+    for (const block of blocks.querySelectorAll("[data-block]")) {
+      this._rotationToggle(block);
+      this._rotationMoveButtons(block);
+    }
+    this._updateRotationMoveButtons();
+    blocks.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-move]");
+      if (!button) return;
+      const block = button.closest("[data-block]");
+      const neighbour = button.dataset.move === "up" ? block.previousElementSibling : block.nextElementSibling;
+      if (!neighbour || !neighbour.dataset.block) return;
+      blocks.insertBefore(button.dataset.move === "up" ? block : neighbour,
+        button.dataset.move === "up" ? neighbour : block);
+      this._rotationChanged();
+      button.focus();
+    });
     get("text-add").addEventListener("click", () => {
       const id = `text:${this._newTextId()}`;
       this._rotationTexts[id] = this._textDefaults();
@@ -1138,11 +1263,13 @@ class DivoomOrchestratorPanel extends HTMLElement {
         block.querySelector(".rotation-toggle span").textContent =
           block.querySelector(".rotation-toggle input").checked ? "Aktiv" : "Inaktiv";
       }
+      this._updateRotationMoveButtons();
       this._rotationLoadFiles(config.steps);
     }).catch((error) => this._rotationMessage(`Rotation konnte nicht geladen werden: ${error.message || String(error)}`, true));
   }
 
   async _rotationLoadFiles(saved = null) {
+    await this._preferencesReady;
     const folder = this.shadowRoot.querySelector("#rotation-folder").value.trim();
     if (!folder) return this._rotationMessage("Bitte einen Ordner eingeben.", true);
     const list = this.shadowRoot.querySelector("#rotation-list");
@@ -1223,6 +1350,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     edit.addEventListener("click", () => this._textEdit(id));
     block.append(icon, description, toggle, edit);
     this._rotationToggle(block);
+    this._rotationMoveButtons(block);
     this.shadowRoot.querySelector("#rotation-blocks").append(block);
     return block;
   }
@@ -1254,6 +1382,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
           }
           this.shadowRoot.querySelector("#rotation-dialog-title").textContent =
             `Textblock bearbeiten: ${settings.name || "Text"}`;
+          this._updateRotationMoveButtons();
         }
         if (field === "source") this._textSource();
         if (field === "duration-mode") this._textDurationLabel();
@@ -1407,16 +1536,15 @@ class DivoomOrchestratorPanel extends HTMLElement {
     if (!element) return;
     if (this._connectionId === undefined) {
       element.textContent = "Status wird geladen …";
-      return;
-    }
-    if (!this._connectionId) {
+    } else if (!this._connectionId) {
       element.textContent = "Kein Bluetooth-Statussensor konfiguriert.";
-      return;
+    } else {
+      const state = this._hass.states[this._connectionId];
+      element.textContent = state
+        ? `${state.attributes?.friendly_name || this._connectionId}: ${state.state}`
+        : `${this._connectionId}: nicht verfügbar`;
     }
-    const state = this._hass.states[this._connectionId];
-    element.textContent = state
-      ? `${state.attributes?.friendly_name || this._connectionId}: ${state.state}`
-      : `${this._connectionId}: nicht verfügbar`;
+    this.shadowRoot.querySelector("#diagnostic-connection").textContent = element.textContent;
   }
 
   _playlistMessage(text, error = false) {
@@ -1449,7 +1577,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     get("cooldown-enabled").addEventListener("change", () => {
       const input = get("cooldown-seconds");
       input.disabled = !get("cooldown-enabled").checked;
-      input.value = input.disabled ? "" : "10";
+      input.value = input.disabled ? "" : String(this._preferences.cooldown || 5);
     });
     for (const id of ["date-start", "date-end"]) get(id).addEventListener("input", dirty);
     get("date-mode").addEventListener("change", () => this._eventDateMode());
@@ -1553,6 +1681,10 @@ class DivoomOrchestratorPanel extends HTMLElement {
 
   async _eventLoadInitial() {
     try {
+      await this._preferencesReady;
+      if (!this._eventDirty && !this.shadowRoot.querySelector("#event-choice").value) {
+        this._eventSetSchedule(null);
+      }
       this._events = Object.assign(Object.create(null),
         await this._hass.callWS({type: "divoom_orchestrator/events"}));
       this._eventChoices("");
@@ -1643,10 +1775,10 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this.shadowRoot.querySelector("#event-enabled").checked = event?.enabled !== false;
     this.shadowRoot.querySelector("#event-priority").value = event?.priority ?? 3;
     const cooldown = this.shadowRoot.querySelector("#event-cooldown-seconds");
-    const cooldownEnabled = event?.cooldown_seconds != null;
+    const cooldownEnabled = event ? event.cooldown_seconds != null : this._eventKind === "trigger" && this._preferences.cooldown > 0;
     this.shadowRoot.querySelector("#event-cooldown-enabled").checked = cooldownEnabled;
     cooldown.disabled = !cooldownEnabled;
-    cooldown.value = cooldownEnabled ? event.cooldown_seconds : "";
+    cooldown.value = cooldownEnabled ? (event?.cooldown_seconds ?? this._preferences.cooldown) : "";
     this.shadowRoot.querySelector("#event-date-mode").value = schedule.mode || "annual";
     this.shadowRoot.querySelector("#event-date-start").value = pickerDate(schedule.start);
     this.shadowRoot.querySelector("#event-date-end").value = pickerDate(schedule.end);
@@ -1764,6 +1896,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     this._eventFolderReady = false;
     this._eventMessage("Ordner wird geladen …");
     try {
+      await this._preferencesReady;
       const [, files] = await Promise.all([
         this._hass.callWS({type: "divoom_orchestrator/event_folders", folder}),
         this._hass.callWS({type: "divoom_orchestrator/playlist_files", folder}),
@@ -1824,7 +1957,7 @@ class DivoomOrchestratorPanel extends HTMLElement {
     value.max = "3600";
     value.step = "any";
     value.required = true;
-    value.value = step?.value ?? 10;
+    value.value = step?.value ?? this._preferences.duration;
     value.setAttribute("aria-label", `Dauer oder Durchläufe für ${file}`);
     for (const input of [check, mode, value]) input.addEventListener("change", dirty);
     value.addEventListener("input", dirty);
